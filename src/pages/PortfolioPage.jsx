@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, X, ChevronLeft, ChevronRight, Mail, Play, Eye } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import imagesData from '../../public/imagenes web/imagenes/images_canonical.json';
@@ -15,6 +15,7 @@ const CATEGORY_ORDER = [
   'Puppets',
   'Blood Wounds',
   'Costumes Masks',
+  'Animatronics',
   'Videos',
 ];
 
@@ -29,6 +30,7 @@ const CATEGORY_LABELS = {
   'Puppets': 'PUPPETS',
   'Blood Wounds': 'BLOOD & WOUNDS',
   'Costumes Masks': 'COSTUMES & MASKS',
+  'Animatronics': 'ANIMATRONICS',
   'Videos': 'VIDEOS',
 };
 
@@ -342,8 +344,12 @@ function Lightbox({ images, index, views, onClose, onPrev, onNext }) {
 
 /* ─── Main page ───────────────────────────────────────────────────────────── */
 export default function PortfolioPage() {
-  const [activeCategory, setActiveCategory] = useState('All');
-  const [displayCategory, setDisplayCategory] = useState('All');
+  const [searchParams] = useSearchParams();
+  const initialCategory = searchParams.get('category') || 'All';
+  const validInitial = CATEGORY_ORDER.includes(initialCategory) ? initialCategory : 'All';
+
+  const [activeCategory, setActiveCategory] = useState(validInitial);
+  const [displayCategory, setDisplayCategory] = useState(validInitial);
   const [transitioning, setTransitioning] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(null);
   const [views, setViews] = useState({});
@@ -428,7 +434,7 @@ export default function PortfolioPage() {
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <header className="pf-header">
         <Link to="/" className="pf-back"><ArrowLeft size={14} /> Volver</Link>
-        <h1 className="pf-title">PORTAFOLIO</h1>
+        <h1 className="pf-title">GALLERY</h1>
       </header>
 
       {/* ── Filter bar ──────────────────────────────────────────────────── */}

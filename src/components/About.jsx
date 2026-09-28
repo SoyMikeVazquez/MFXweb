@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Pause, Play } from 'lucide-react';
 import { useLanguage } from '../LanguageContext';
 import anaImg from '../assets/FotosSocios/AnaMaquillajeFX.jpg';
-import robImg from '../assets/FotosSocios/RobOrtizFX.jpg';
+import robImg from '../assets/FotosSocios/RobOrtizFX2.jpg';
 
 const About = () => {
     const { t, getArray } = useLanguage();
@@ -21,58 +21,43 @@ const About = () => {
     const cards = [
         {
             id: 0,
-            image: anaImg,
-            letter: 'A',
-            symbol: '♠' // Un solo símbolo como referencia
+            image: anaImg
         },
         {
             id: 1,
-            image: robImg,
-            letter: 'R',
-            symbol: '♠'
+            image: robImg
         }
     ];
 
     const currentText = getArray('about', 'text');
 
     return (
-        <section id="about" className="py-32 bg-[#050505] text-white relative border-b border-neutral-900">
+        <section id="about" className="py-24 bg-[#050505] text-white relative border-b border-neutral-900">
             <div className="container mx-auto px-6">
                 <div className="flex flex-col md:flex-row gap-20 items-center">
 
                     {/* Left Side: Cards Container */}
-                    <div className="w-full md:w-5/12 relative flex h-[400px] md:h-[550px] items-center justify-center mb-12 md:mb-0">
-                        <div className="relative w-full max-w-[280px] md:max-w-[340px] aspect-[2/3]">
+                    <div className="w-full md:w-5/12 relative flex h-[320px] md:h-[440px] items-center justify-center mb-12 md:mb-0">
+                        <div className="relative w-full max-w-[280px] md:max-w-[340px] aspect-[3/4]">
                             {cards.map((card) => {
                                 const isFront = frontCardIndex === card.id;
                                 return (
                                     <div
                                         key={card.id}
-                                        className={`absolute inset-0 bg-[#e5e5e5] rounded-xl p-3 shadow-[0_0_30px_rgba(0,0,0,0.8)] transition-all duration-1000 ease-[cubic-bezier(0.4,0,0.2,1)] border border-neutral-400 group
+                                        className={`absolute inset-0 bg-neutral-900 rounded-xl shadow-[0_0_30px_rgba(0,0,0,0.8)] transition-all duration-1000 ease-[cubic-bezier(0.4,0,0.2,1)] border border-neutral-800 group overflow-hidden
                                             ${isFront
                                                 ? 'translate-x-6 rotate-[4deg] z-20 scale-100 opacity-100 shadow-[0_20px_50px_rgba(0,0,0,0.8)]'
                                                 : '-translate-x-6 -rotate-[6deg] z-10 scale-95 opacity-70'}
                                         `}
                                     >
-                                        {/* Minimalist Card Design - Single Symbol */}
-                                        <div className="absolute top-3 left-4 flex flex-col items-center justify-center text-neutral-900 font-serif">
-                                            <span className="text-xl font-bold leading-none">{card.letter}</span>
-                                            <span className="text-2xl leading-none mt-1">{card.symbol}</span>
-                                        </div>
-
-                                        <div className="absolute bottom-3 right-4 flex flex-col items-center justify-center text-neutral-900 font-serif rotate-180">
-                                            <span className="text-xl font-bold leading-none">{card.letter}</span>
-                                            <span className="text-2xl leading-none mt-1">{card.symbol}</span>
-                                        </div>
-
                                         {/* Image Area */}
-                                        <div className="w-full h-full pt-14 pb-14 px-2">
+                                        <div className="w-full h-full">
                                             <img
                                                 src={card.image}
-                                                alt={`MFX Crew Member ${card.letter}`}
-                                                className="w-full h-full object-cover rounded shadow-inner transition-all duration-700 pointer-events-none"
+                                                alt={`MFX Crew Member ${card.id + 1}`}
+                                                className={`w-full h-full object-cover transition-all duration-700 pointer-events-none ${card.id === 1 ? 'grayscale' : ''}`}
                                             />
-                                            <div className="absolute inset-0 bg-neutral-900/10 pointer-events-none rounded-xl"></div>
+                                            <div className="absolute inset-0 bg-neutral-900/10 pointer-events-none"></div>
                                         </div>
                                     </div>
                                 );
@@ -94,7 +79,7 @@ const About = () => {
                         </h2>
 
                         <div className="relative group">
-                            <div className={`bg-neutral-900/50 border-l-2 border-red-900 h-[450px] relative transition-all duration-500 ${isAutoScroll ? 'overflow-hidden' : 'overflow-y-scroll custom-scrollbar'}`}>
+                            <div className={`bg-neutral-900/50 border-l-2 border-red-900 h-[360px] relative transition-all duration-500 ${isAutoScroll ? 'overflow-hidden' : 'overflow-y-scroll custom-scrollbar'}`}>
                                 <div className={`p-8 ${isAutoScroll ? 'animate-vertical-scroll' : ''}`}>
                                     {/* First set of text */}
                                     {currentText.map((paragraph, index) => (

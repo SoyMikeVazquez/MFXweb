@@ -348,7 +348,7 @@ export default function GalleryAdmin() {
         setUploadCategories([]);
         if (fileInputRef.current) fileInputRef.current.value = '';
         
-        showToast('Imagen subida y agregada con éxito al portafolio.');
+        showToast('Imagen subida y agregada con éxito a la gallery.');
 
       } else {
         // --- Video Upload ---
@@ -715,8 +715,8 @@ export default function GalleryAdmin() {
       {/* Header */}
       <header className="pf-header border-b border-neutral-900 py-8 px-6 bg-gradient-to-b from-[#0d0d0d] to-[#050505] relative">
         <div className="max-w-7xl mx-auto flex justify-between items-center mb-4">
-          <Link to="/portfolio" className="pf-back text-[#555] hover:text-red-600 flex items-center gap-2 font-['Oswald'] font-bold tracking-widest text-xs">
-            <ArrowLeft size={14} /> VOLVER AL PORTAFOLIO
+          <Link to="/gallery" className="pf-back text-[#555] hover:text-red-600 flex items-center gap-2 font-['Oswald'] font-bold tracking-widest text-xs">
+            <ArrowLeft size={14} /> VOLVER A LA GALERÍA
           </Link>
           <button 
             onClick={handleLogout}

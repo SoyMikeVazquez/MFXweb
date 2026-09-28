@@ -7,9 +7,11 @@ import BrandSlider from './components/BrandSlider';
 import Portfolio from './components/Portfolio';
 import CrewGallery from './components/CrewGallery';
 import Services from './components/Services';
+import Interviews from './components/Interviews';
 import Testimonials from './components/Testimonials';
 import Contact from './components/Contact';
 import Footer from './components/Footer';
+import LatestProductions from './components/LatestProductions';
 import { LanguageProvider } from './LanguageContext';
 import { Mail } from 'lucide-react';
 
@@ -57,12 +59,14 @@ function HomePage() {
       <Navbar />
 
       <main>
-        <About />
         <BrandSlider />
         <Portfolio />
-        <CrewGallery />
         <Services />
-        <Testimonials />
+        <CrewGallery />
+        <LatestProductions />
+        <Interviews />
+        {/* <Testimonials /> */}
+        <About />
         <Contact />
       </main>
 
@@ -127,7 +131,7 @@ function App() {
       <ScrollToHashElement />
       <Routes>
         <Route path="/" element={<HomePage />} />
-        <Route path="/portfolio" element={<PortfolioPage />} />
+        <Route path="/gallery" element={<PortfolioPage />} />
         <Route path="/admin" element={<GalleryAdmin />} />
       </Routes>
     </LanguageProvider>

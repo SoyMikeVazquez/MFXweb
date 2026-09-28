@@ -11,7 +11,7 @@ const Navbar = () => {
 
     const navItems = [
         { key: 'HOME', hash: 'inicio' },
-        { key: 'PORTFOLIO', hash: 'portafolio' },
+        { key: 'PORTFOLIO', hash: 'gallery' },
         { key: 'SERVICES', hash: 'services' },
         { key: 'CONTACT', hash: 'contact' }
     ];
@@ -42,7 +42,7 @@ const Navbar = () => {
                                 return (
                                     <Link
                                         key={item.key}
-                                        to="/portfolio"
+                                        to="/gallery"
                                         className="text-xs font-bold text-neutral-500 hover:text-red-600 transition-colors tracking-[0.25em] uppercase"
                                     >
                                         {t('nav', item.key)}
@@ -128,7 +128,7 @@ const Navbar = () => {
                                 return (
                                     <Link
                                         key={item.key}
-                                        to="/portfolio"
+                                        to="/gallery"
                                         onClick={closeMenu}
                                         className="text-xl font-bold text-neutral-300 hover:text-red-600 transition-colors tracking-[0.25em] uppercase border-b border-neutral-800 pb-4"
                                     >

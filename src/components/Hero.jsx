@@ -85,9 +85,9 @@ const Hero = () => {
 
                     <div className="flex flex-col sm:flex-row gap-6">
                         <a
-                            href="#portfolio"
+                            href="#gallery"
                             onClick={() => {
-                                window.dispatchEvent(new CustomEvent('reset-portfolio-tab'));
+                                window.dispatchEvent(new CustomEvent('reset-gallery-tab'));
                             }}
                             className="px-8 py-4 bg-white text-black text-xs font-bold uppercase text-center tracking-[0.2em] hover:bg-neutral-200 transition-colors"
                         >

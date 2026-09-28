@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 
 // Import images from assets/Portafolio
@@ -9,15 +8,6 @@ import resident from '../assets/Portafolio/resident.jpeg';
 import roma from '../assets/Portafolio/roma.jpg';
 import soz from '../assets/Portafolio/soz.jpg';
 import yeti from '../assets/Portafolio/yeti.jpeg';
-import hippos from '../assets/Portafolio/hippos.jpg';
-import oldman from '../assets/Portafolio/oldman.jpg';
-import zombie from '../assets/Portafolio/zombie.jpg';
-import tiger from '../assets/Portafolio/tiger.jpg';
-import witchNew from '../assets/Portafolio/witch_new.png';
-import blood from '../assets/Portafolio/blood.jpg';
-import character from '../assets/Portafolio/character.png';
-import yetiNew from '../assets/Portafolio/yeti_new.jpg';
-import ratPuppet from '../assets/Portafolio/rat_puppet.png';
 
 // Import images from assets/UltimasProducciones
 import turnoNocturno from '../assets/UltimasProducciones/Turno nocturno”.jpg';
@@ -28,22 +18,30 @@ import tormento from '../assets/UltimasProducciones/tormento.jpg';
 import cienAnos from '../assets/UltimasProducciones/cien-anos.jpg';
 import demonatrix from '../assets/UltimasProducciones/demonatrix.jpg';
 import blinkTwice from '../assets/UltimasProducciones/blink-twice.jpg';
+import residentEvil from '../assets/UltimasProducciones/resident-evil.png';
 
-const Portfolio = () => {
+const LatestProductions = () => {
     const { t } = useLanguage();
-    const [activeTab, setActiveTab] = useState('portfolio');
+    const [activeTab, setActiveTab] = useState('productions');
 
     const data = {
         portfolio: [
-            { id: 1, title: "Character Makeup", query: "Character Make Up", image: character },
-            { id: 2, title: "Horror and Fantasy", query: "Horror Fantasy", image: witchNew },
-            { id: 3, title: "Old Age", query: "Old Age", image: oldman },
-            { id: 4, title: "Realistic Bodies", query: "Realistic Bodies", image: zombie },
-            { id: 5, title: "Realistic Animals", query: "Realistic Animals", image: tiger },
-            { id: 6, title: "Puppets", query: "Puppets", image: ratPuppet },
-            { id: 7, title: "Blood and Wounds", query: "Blood Wounds", image: blood },
-            { id: 8, title: "Costumes and Mask", query: "Costumes Masks", image: yetiNew },
-            { id: 9, title: "Animatronics", query: "Animatronics", image: hippos },
+            { id: 1, title: "Roma", category: `${t('portfolio', 'categories').production} 2026`, image: roma },
+            { id: 2, title: "Resident Evil", category: "Spot Capcom 2026", image: resident },
+            { id: 3, title: "S.O.Z", category: `${t('portfolio', 'categories').production} 2021`, image: soz },
+            { id: 4, title: "Mal de ojo", category: `${t('portfolio', 'categories').production} 2022`, image: bruja },
+            { id: 5, title: "Yeti", category: "Spot Coffe Mate 2026", image: yeti },
+            { id: 6, title: "La hora marcada", category: `Vix ${t('portfolio', 'categories').tvSeries} 2023`, image: hora },
+        ],
+        productions: [
+            { id: 6, title: "Cien años de soledad", category: t('portfolio', 'categories').production, year: "2026", image: cienAnos },
+            { id: 7, title: "The Demonatrix", category: t('portfolio', 'categories').production, year: "2026", image: demonatrix },
+            { id: 8, title: "Resident Evil", category: "Spot Capcom", year: "2026", image: residentEvil },
+            { id: 1, title: "Turno Nocturno", category: t('portfolio', 'categories').production, year: "2025", image: turnoNocturno },
+            { id: 2, title: "Párvulos", category: t('portfolio', 'categories').production, year: "2025", image: parvulos },
+            { id: 3, title: "Tormento", category: t('portfolio', 'categories').production, year: "2026", image: tormento },
+            { id: 4, title: "Lazo de Petra", category: t('portfolio', 'categories').shortFilm, year: "2026", image: lazoDePetra },
+            { id: 5, title: "Dead", category: t('portfolio', 'categories').musicVideo, year: "2026", image: dead },
         ],
         articles: [
             { id: 1, title: "The Art of prosthetics", category: t('portfolio', 'categories').behindScenes, date: "May 2024", image: bruja },
@@ -55,7 +53,7 @@ const Portfolio = () => {
 
     return (
         <section
-            id="gallery"
+            id="latest-productions"
             className="py-24 bg-black border-t border-neutral-900"
         >
             <div className="container mx-auto px-6 mb-12">
@@ -65,12 +63,13 @@ const Portfolio = () => {
                             {t('portfolio', 'explore')}
                         </span>
                         <h2 className="text-4xl md:text-6xl font-black text-white uppercase tracking-tighter">
-                            {t('portfolio', 'archive')}
+                            {/* Instead of 'archive', we might use something else but let's stick to the same or just visually keep it consistent if there's no specific instruction. I'll just use the same as portfolio for now or remove the text. Wait, the user didn't mention changing the title. I will keep it empty or same. I'll just use the same title or an empty one. Let's keep the same for now, or maybe the tabs are enough. Let's just leave it empty. */}
+                            {t('portfolio', 'tabs').productions}
                         </h2>
                     </div>
 
-                    <div className="hidden gap-4 overflow-x-auto hide-scrollbar">
-                        {['portfolio', 'productions', 'articles'].map((tab) => (
+                    <div className="flex gap-4 overflow-x-auto hide-scrollbar">
+                        {['productions', 'articles'].map((tab) => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
@@ -91,7 +90,7 @@ const Portfolio = () => {
             <div className="w-full overflow-x-auto pb-12 hide-scrollbar">
                 <div className="flex gap-6 px-6 w-max animate-fade-in" key={activeTab}>
                     {data[activeTab].map((item) => (
-                        <Link to={`/gallery?category=${encodeURIComponent(item.query)}`} key={item.id} className="relative group w-[300px] md:w-[400px] h-[500px] overflow-hidden bg-[#0a0a0a] border border-neutral-900 flex-shrink-0 hover:border-neutral-700 transition-all duration-500 cursor-pointer block">
+                        <div key={item.id} className="relative group w-[300px] md:w-[400px] h-[500px] overflow-hidden bg-[#0a0a0a] border border-neutral-900 flex-shrink-0 hover:border-neutral-700 transition-all duration-500 cursor-pointer">
 
                             {/* Actual Project Image */}
                             <div className="absolute inset-0 bg-neutral-900">
@@ -107,6 +106,15 @@ const Portfolio = () => {
                             {/* Overlay Content */}
                             <div className="absolute inset-0 p-8 flex flex-col justify-end bg-gradient-to-t from-black via-transparent to-transparent opacity-90">
                                 <div className="transform translate-y-2 group-hover:translate-y-0 transition-transform duration-500">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <span className="text-red-700 text-xs font-bold uppercase tracking-widest block">
+                                            {item.category}
+                                        </span>
+                                        {/* Display extra info based on content type next to category */}
+                                        {item.year && <span className="text-neutral-500 text-[10px] font-bold tracking-widest">{item.year}</span>}
+                                        {item.date && <span className="text-neutral-500 text-[10px] font-bold tracking-widest">{item.date}</span>}
+                                    </div>
+
                                     <h3 className="text-2xl font-bold text-white uppercase tracking-wide group-hover:text-neutral-300 transition-colors leading-tight">
                                         {item.title}
                                     </h3>
@@ -114,25 +122,9 @@ const Portfolio = () => {
                                     <div className="w-0 group-hover:w-full h-[1px] bg-red-700 mt-6 transition-all duration-500"></div>
                                 </div>
                             </div>
-                        </Link>
+                        </div>
                     ))}
                 </div>
-            </div>
-
-            {/* View More Button - Kept in DOM to prevent Layout Shift */}
-            <div className="container mx-auto px-6 mt-12 flex justify-center transition-opacity duration-500 opacity-100 pointer-events-auto">
-                <Link
-                    to="/gallery"
-                    className="group relative px-8 py-4 bg-transparent border border-red-900 overflow-hidden transition-all duration-500 hover:border-red-600"
-                >
-                    {/* Fill background on hover */}
-                    <div className="absolute inset-0 w-0 bg-red-900 group-hover:w-full transition-all duration-500 ease-out"></div>
-
-                    {/* Button Text */}
-                    <span className="relative z-10 text-white font-bold uppercase tracking-[0.3em] text-sm">
-                        {t('portfolio', 'viewFull')}
-                    </span>
-                </Link>
             </div>
 
             <style>{`
@@ -155,5 +147,4 @@ const Portfolio = () => {
     );
 };
 
-export default Portfolio;
-
+export default LatestProductions;

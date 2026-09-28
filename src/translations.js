@@ -2,13 +2,13 @@ export const translations = {
     en: {
         nav: {
             HOME: 'HOME',
-            PORTFOLIO: 'PORTFOLIO',
+            PORTFOLIO: 'GALLERY',
             SERVICES: 'SERVICES',
             CONTACT: 'CONTACT'
         },
         hero: {
             subtitle: 'Professional FX Studio',
-            description: 'With over 20 years of experience, MFX is the leading company in Latin America in the creation of special effects, specializing in characterization and prosthetics for film, series, and television',
+            description: 'With over 20 years of experience, MFX is the leading company in Latin America in the creation of special effects, specializing in character makeup and prosthetics for film, series, and television',
             viewProjects: 'View Projects',
             contact: 'Contact Us',
             scroll: 'Scroll'
@@ -34,13 +34,13 @@ export const translations = {
         },
         portfolio: {
             explore: 'Explore MFX',
-            archive: 'Archive',
+            archive: 'Gallery',
             tabs: {
-                portfolio: 'Portfolio',
+                portfolio: 'Gallery',
                 productions: 'Latest Productions',
                 articles: 'Articles'
             },
-            viewFull: 'View full portfolio',
+            viewFull: 'View full gallery',
             categories: {
                 production: 'Production',
                 spot: 'Spot',
@@ -54,16 +54,29 @@ export const translations = {
         },
         crew: {
             behindScenes: 'Behind the scenes',
-            crewTitle: 'Crew'
+            crewTitle: 'BTS'
+        },
+        interviews: {
+            title: 'Interviews',
+            subtitle: 'Press & Media'
         },
         services: {
             capabilities: 'Capabilities',
             title: 'Services',
+            quoteBtn: 'Quote this service',
+            availabilityNote: '* Check dates and availability',
             items: [
-                { id: "Specialty", title: "Prosthetics", desc: "Cinematic-grade silicone and latex prosthetics." },
-                { id: "Experience", title: "Animatronics", desc: "Complex mechanisms to bring creatures to life." },
-                { id: "Arts", title: "Dummies", desc: "Hyper-realistic fake bodies for stunt scenes." },
-                { id: "Extensive trajectory", title: "Characterization", desc: "Wounds, aging, and extreme transformation." }
+                { title: "Beauty Makeup", desc: "Professional makeup for actors and models." },
+                { title: "Hair / Hair Pieces", desc: "Custom wigs and facial hair applications." },
+                { title: "Character Makeup", desc: "Transformative makeup for specific roles." },
+                { title: "Prosthetic Makeup", desc: "Advanced silicone and latex prosthetics." },
+                { title: "Animatronics", desc: "Mechanized props and creature effects." },
+                { title: "Realistic Dummies", desc: "Lifelike bodies for stunts and scenes." },
+                { title: "Puppets", desc: "Hand-operated and mechanical creatures." },
+                { title: "Special wardrobe", desc: "Custom-built costumes and armor." },
+                { title: "Hire Dummies", desc: "Rental of realistic prop bodies." },
+                { title: "Educational workshops", desc: "Training in FX and makeup techniques." },
+                { title: "Store", desc: "Professional FX materials and tools." }
             ]
         },
         testimonials: {
@@ -89,7 +102,7 @@ export const translations = {
         },
         footer: {
             about: 'ABOUT US',
-            aboutText: 'With over 20 years of experience, MFX is the leading company in Latin America in the creation of special effects, specializing in characterization and prosthetics for film, series, and television.',
+            aboutText: 'With over 20 years of experience, MFX is the leading company in Latin America in the creation of special effects, specializing in character makeup and prosthetics for film, series, and television.',
             privacy: 'PRIVACY AND COPYRIGHT POLICY',
             contact: 'CONTACT US',
             follow: 'FOLLOW US'
@@ -98,13 +111,13 @@ export const translations = {
     es: {
         nav: {
             HOME: 'INICIO',
-            PORTFOLIO: 'PORTAFOLIO',
+            PORTFOLIO: 'GALLERY',
             SERVICES: 'SERVICIOS',
             CONTACT: 'CONTACTO'
         },
         hero: {
             subtitle: 'Estudio de Efectos Especiales',
-            description: 'Con más de 20 años de experiencia, MFX es la empresa líder en Latinoamérica en cuanto a la creación de efectos especiales enfocados en caracterizaciones y prostéticos para cine, series y televisión a nivel internacional',
+            description: 'Con más de 20 años de experiencia, MFX es la empresa líder en Latinoamérica en la creación de efectos enfocados en caracterizaciones y prostéticos para cine, series y televisión a nivel internacional',
             viewProjects: 'Ver Proyectos',
             contact: 'Contactar',
             scroll: 'Scroll'
@@ -130,13 +143,13 @@ export const translations = {
         },
         portfolio: {
             explore: 'Explorar MFX',
-            archive: 'Archivo',
+            archive: 'Galería',
             tabs: {
-                portfolio: 'Portafolio',
+                portfolio: 'Gallery',
                 productions: 'Últimas Producciones',
                 articles: 'Artículos'
             },
-            viewFull: 'Ver portafolio completo',
+            viewFull: 'Ver gallery completa',
             categories: {
                 production: 'Producción',
                 spot: 'Spot',
@@ -150,16 +163,29 @@ export const translations = {
         },
         crew: {
             behindScenes: 'Detrás de cámaras',
-            crewTitle: 'Crew'
+            crewTitle: 'BTS'
+        },
+        interviews: {
+            title: 'Entrevistas',
+            subtitle: 'Prensa y Medios'
         },
         services: {
             capabilities: 'Capacidades',
             title: 'Servicios',
+            quoteBtn: 'Cotizar este servicio',
+            availabilityNote: '* Consulta fechas y disponibilidad',
             items: [
-                { id: "Especialidad", title: "Prostéticos", desc: "Prótesis de silicona y látex de grado cinematográfico." },
-                { id: "Experiencia", title: "Animatrónicos", desc: "Mecanismos complejos para dar vida a criaturas." },
-                { id: "Artes", title: "Dummies", desc: "Cuerpos falsos hiperrealistas para escenas de riesgo." },
-                { id: "Mayor trayectoria", title: "Caracterización", desc: "Heridas, envejecimiento y transformación extrema." }
+                { title: "Beauty Makeup", desc: "Maquillaje profesional para actores y modelos." },
+                { title: "Hair / Hair Pieces", desc: "Pelucas personalizadas y aplicaciones faciales." },
+                { title: "Character Makeup", desc: "Maquillaje transformativo para roles específicos." },
+                { title: "Prosthetic Makeup", desc: "Prótesis avanzadas de silicona y látex." },
+                { title: "Animatronics", desc: "Props mecanizados y efectos de criaturas." },
+                { title: "Realistic Dummies", desc: "Cuerpos hiperrealistas para dobles y escenas." },
+                { title: "Puppets", desc: "Criaturas mecánicas y operadas manualmente." },
+                { title: "Special wardrobe", desc: "Vestuario y armaduras a medida." },
+                { title: "Hire Dummies", desc: "Renta de cuerpos prostéticos realistas." },
+                { title: "Educational workshops", desc: "Entrenamiento en FX y maquillaje." },
+                { title: "Store", desc: "Materiales y herramientas profesionales de FX." }
             ]
         },
         testimonials: {
