@@ -19,6 +19,13 @@ import character from '../assets/Portafolio/character.png';
 import yetiNew from '../assets/Portafolio/yeti_new.jpg';
 import ratPuppet from '../assets/Portafolio/rat_puppet.png';
 
+// New images
+import newRealisticAnimals from '../assets/Portafolio/new_realistic_animals.png';
+import newBloodWounds from '../assets/Portafolio/new_blood_wounds.png';
+import newRealisticBodies from '../assets/Portafolio/new_realistic_bodies.jpg';
+import newRomaCharacter from '../assets/Portafolio/new_roma_character.jpg';
+import newOldAge from '../assets/Portafolio/new_old_age.jpg';
+
 // Import images from assets/UltimasProducciones
 import turnoNocturno from '../assets/UltimasProducciones/Turno nocturno”.jpg';
 import dead from '../assets/UltimasProducciones/dead.jpg';
@@ -35,15 +42,14 @@ const Portfolio = () => {
 
     const data = {
         portfolio: [
-            { id: 1, title: "Character Makeup", query: "Character Make Up", image: character },
+            { id: 1, title: "Character Makeup", query: "Character Make Up", image: newRomaCharacter },
             { id: 2, title: "Horror and Fantasy", query: "Horror Fantasy", image: witchNew },
-            { id: 3, title: "Old Age", query: "Old Age", image: oldman },
-            { id: 4, title: "Realistic Bodies", query: "Realistic Bodies", image: zombie },
-            { id: 5, title: "Realistic Animals", query: "Realistic Animals", image: tiger },
-            { id: 6, title: "Puppets", query: "Puppets", image: ratPuppet },
-            { id: 7, title: "Blood and Wounds", query: "Blood Wounds", image: blood },
+            { id: 3, title: "Old Age", query: "Old Age", image: newOldAge },
+            { id: 4, title: "Realistic Bodies", query: "Realistic Bodies", image: newRealisticBodies },
+            { id: 5, title: "Realistic Animals", query: "Realistic Animals", image: newRealisticAnimals },
+            { id: 6, title: "Puppets & Animatronics", query: "Puppets & Animatronics", image: ratPuppet },
+            { id: 7, title: "Blood and Wounds", query: "Blood Wounds", image: newBloodWounds },
             { id: 8, title: "Costumes and Mask", query: "Costumes Masks", image: yetiNew },
-            { id: 9, title: "Animatronics", query: "Animatronics", image: hippos },
         ],
         articles: [
             { id: 1, title: "The Art of prosthetics", category: t('portfolio', 'categories').behindScenes, date: "May 2024", image: bruja },
@@ -101,13 +107,13 @@ const Portfolio = () => {
                                     className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700"
                                 />
                                 {/* Initial dark overlay to make text readable */}
-                                <div className="absolute inset-0 bg-black/40 group-hover:bg-black/10 transition-colors duration-500"></div>
+                                <div className="absolute inset-0 bg-black/15 group-hover:bg-black/0 transition-colors duration-500"></div>
                             </div>
 
                             {/* Overlay Content */}
-                            <div className="absolute inset-0 p-8 flex flex-col justify-end bg-gradient-to-t from-black via-transparent to-transparent opacity-90">
+                            <div className="absolute inset-0 p-8 flex flex-col justify-end bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60">
                                 <div className="transform translate-y-2 group-hover:translate-y-0 transition-transform duration-500">
-                                    <h3 className="text-2xl font-bold text-white uppercase tracking-wide group-hover:text-neutral-300 transition-colors leading-tight">
+                                    <h3 className="text-2xl font-bold text-white uppercase tracking-wide group-hover:text-neutral-300 transition-colors leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                                         {item.title}
                                     </h3>
 

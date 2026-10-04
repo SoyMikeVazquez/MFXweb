@@ -8,7 +8,7 @@ export const translations = {
         },
         hero: {
             subtitle: 'Professional FX Studio',
-            description: 'With over 20 years of experience, MFX is the leading company in Latin America in the creation of special effects, specializing in character makeup and prosthetics for film, series, and television',
+            description: 'MFX Mexico is a Mexican company founded in 2010 by Ana Flores and Roberto Ortiz, specializing in special effects makeup, characterization, and practical effects for film, television, and advertising. With a trajectory that has consolidated it as one of the main FX makeup providers in Latin America, MFX Mexico has participated in major national and international productions such as Roma, Apocalypto, and One Hundred Years of Solitude. Their work has been recognized with Ariel Awards and various nominations in the categories of Best Makeup and Special Effects for projects such as Km. 31, El Infierno, and Noche de Fuego, combining technical excellence, creativity, and a profound artistic vocation.',
             viewProjects: 'View Projects',
             contact: 'Contact Us',
             scroll: 'Scroll'
@@ -98,7 +98,10 @@ export const translations = {
             formName: 'Name',
             formEmail: 'Email',
             formDetails: 'Project Details',
-            send: 'Send Inquiry'
+            send: 'Send Inquiry',
+            sending: 'Sending...',
+            successMessage: 'Your message has been sent successfully. We will get back to you soon!',
+            errorMessage: 'There was an error sending your message. Please try again.'
         },
         footer: {
             about: 'ABOUT US',
@@ -117,7 +120,7 @@ export const translations = {
         },
         hero: {
             subtitle: 'Estudio de Efectos Especiales',
-            description: 'Con más de 20 años de experiencia, MFX es la empresa líder en Latinoamérica en la creación de efectos enfocados en caracterizaciones y prostéticos para cine, series y televisión a nivel internacional',
+            description: 'MFX México es una empresa mexicana fundada en 2010 por Ana Flores y Roberto Ortiz, especializada en maquillaje de efectos especiales, caracterización y efectos prácticos para cine, televisión y publicidad. Con una trayectoria que la ha consolidado como una de las principales compañías proveedoras de maquillaje FX en América Latina, MFX México ha participado en importantes producciones nacionales e internacionales como Roma, Apocalypto y Cien años de soledad. Su trabajo ha sido reconocido con Premios Ariel y diversas nominaciones en las categorías de Mejor Maquillaje y Efectos Especiales, por proyectos como Km. 31, El Infierno y Noche de Fuego, combinando excelencia técnica, creatividad y una profunda vocación artística.',
             viewProjects: 'Ver Proyectos',
             contact: 'Contactar',
             scroll: 'Scroll'
@@ -207,7 +210,10 @@ export const translations = {
             formName: 'Nombre',
             formEmail: 'Email',
             formDetails: 'Detalles del Proyecto',
-            send: 'Enviar Consulta'
+            send: 'Enviar Consulta',
+            sending: 'Enviando...',
+            successMessage: 'Tu mensaje ha sido enviado con éxito. ¡Nos pondremos en contacto pronto!',
+            errorMessage: 'Hubo un error al enviar el mensaje. Por favor intenta de nuevo.'
         },
         footer: {
             about: 'SOBRE NOSOTROS',

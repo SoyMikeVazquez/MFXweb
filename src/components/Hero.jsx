@@ -79,7 +79,7 @@ const Hero = () => {
                         />
                     </div>
 
-                    <p className="text-neutral-400 text-lg md:text-xl font-light leading-relaxed max-w-xl mb-12 border-l border-neutral-800 pl-6">
+                    <p className="text-neutral-400 text-sm md:text-base font-light leading-relaxed max-w-2xl mb-12 border-l border-neutral-800 pl-6">
                         {t('hero', 'description')}
                     </p>
 

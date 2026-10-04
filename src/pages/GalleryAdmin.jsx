@@ -15,9 +15,12 @@ import {
   Loader2,
   Play,
   Video,
-  LogOut
+  LogOut,
+  Trash2,
+  ImagePlus
 } from 'lucide-react';
 import initialImagesData from '../../public/imagenes web/imagenes/images_canonical.json';
+import initialProductionsData from '../../public/imagenes web/imagenes/productions.json';
 
 const CATEGORIES = [
   'Character Make Up',
@@ -25,7 +28,7 @@ const CATEGORIES = [
   'Old Age',
   'Realistic Bodies',
   'Realistic Animals',
-  'Puppets',
+  'Puppets & Animatronics',
   'Blood Wounds',
   'Costumes Masks',
 ];
@@ -36,24 +39,30 @@ const CATEGORY_LABELS = {
   'Old Age': 'OLD AGE',
   'Realistic Bodies': 'REALISTIC BODIES',
   'Realistic Animals': 'REALISTIC ANIMALS',
-  'Puppets': 'PUPPETS',
+  'Puppets & Animatronics': 'PUPPETS & ANIMATRONICS',
   'Blood Wounds': 'BLOOD & WOUNDS',
   'Costumes Masks': 'COSTUMES & MASKS',
 };
 
 export default function GalleryAdmin() {
   const [gallery, setGallery] = useState([]);
+  const [productionsList, setProductionsList] = useState(initialProductionsData || []);
+  const [newProductionName, setNewProductionName] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('All');
-  const [username, setUsername] = useState(''); // Email for Hostinger API
-  const [password, setPassword] = useState(''); // Password for Hostinger API
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [username, setUsername] = useState(() => sessionStorage.getItem('mfx_admin_username') || 'local_developer'); // Email for Hostinger API
+  const [password, setPassword] = useState(() => sessionStorage.getItem('mfx_admin_password') || 'local_mode'); // Password for Hostinger API
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [isVerifyingLogin, setIsVerifyingLogin] = useState(false);
   const [loginUserStr, setLoginUserStr] = useState('');
   const [loginPasswordInput, setLoginPasswordInput] = useState('');
   
-  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const isLocal = window.location.hostname === 'localhost' || 
+                  window.location.hostname === '127.0.0.1' || 
+                  window.location.hostname.startsWith('192.168.') ||
+                  window.location.hostname.startsWith('10.') ||
+                  window.location.port === '5173';
 
   // Notification states
   const [toast, setToast] = useState({ message: '', type: '', visible: false });
@@ -69,6 +78,7 @@ export default function GalleryAdmin() {
   const [uploadPreview, setUploadPreview] = useState('');
   const [uploadCaption, setUploadCaption] = useState('');
   const [uploadCategories, setUploadCategories] = useState([]);
+  const [uploadProductions, setUploadProductions] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -84,6 +94,9 @@ export default function GalleryAdmin() {
   const fileInputRef = useRef(null);
   const videoFileInputRef = useRef(null);
   const thumbnailInputRef = useRef(null);
+
+  const editImageInputRef = useRef(null);
+  const [editingItem, setEditingItem] = useState(null);
 
   // Check sessionStorage on mount
   useEffect(() => {
@@ -258,6 +271,14 @@ export default function GalleryAdmin() {
     }
   };
 
+  const toggleUploadProduction = (prod) => {
+    if (uploadProductions.includes(prod)) {
+      setUploadProductions(uploadProductions.filter(p => p !== prod));
+    } else {
+      setUploadProductions([...uploadProductions, prod]);
+    }
+  };
+
   const uploadRawFile = async (file, base64Preview) => {
     const base64Data = base64Preview.split(',')[1];
     const payload = {
@@ -314,7 +335,8 @@ export default function GalleryAdmin() {
           filename: uploadFile.name,
           base64Data,
           hover_caption: uploadCaption,
-          categories: uploadCategories
+          categories: uploadCategories,
+          productions: uploadProductions
         };
 
         const url = isLocal ? '/api/upload' : '/api.php?action=upload';
@@ -346,6 +368,7 @@ export default function GalleryAdmin() {
         setUploadPreview('');
         setUploadCaption('');
         setUploadCategories([]);
+        setUploadProductions([]);
         if (fileInputRef.current) fileInputRef.current.value = '';
         
         showToast('Imagen subida y agregada con éxito a la gallery.');
@@ -397,6 +420,7 @@ export default function GalleryAdmin() {
           filename: uploadedThumbData.filename,
           hover_caption: uploadCaption,
           categories: uploadCategories,
+          productions: uploadProductions,
           is_video: true,
           video_url: finalVideoUrl,
           video_type: videoTypeVal,
@@ -414,6 +438,7 @@ export default function GalleryAdmin() {
         setVideoThumbnailPreview('');
         setUploadCaption('');
         setUploadCategories([]);
+        setUploadProductions([]);
         if (videoFileInputRef.current) videoFileInputRef.current.value = '';
         if (thumbnailInputRef.current) thumbnailInputRef.current.value = '';
 
@@ -538,6 +563,58 @@ export default function GalleryAdmin() {
     setGallery(reordered);
   };
 
+  const handleDeleteImage = (item) => {
+    if (window.confirm(`¿Estás seguro de que quieres eliminar esta imagen de la galería? Esta acción no se puede deshacer y se aplicará cuando guardes los cambios.\n\n${item.filename}`)) {
+      const updatedGallery = gallery.filter(i => i.filename !== item.filename);
+      const reordered = updatedGallery.map((i, idx) => ({ ...i, order: idx + 1 }));
+      setGallery(reordered);
+      showToast(`Imagen eliminada: ${item.filename}. No olvides hacer clic en GUARDAR CAMBIOS.`);
+    }
+  };
+
+  const handleEditImageClick = (item) => {
+    setEditingItem(item);
+    if (editImageInputRef.current) {
+      editImageInputRef.current.click();
+    }
+  };
+
+  const handleEditImageFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !editingItem) return;
+    
+    // Check credentials if prod
+    if (!isLocal && (!username || !password)) {
+      showToast('Por favor, introduce usuario y contraseña.', 'error');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      try {
+        setIsUploading(true);
+        const { src_url, filename } = await uploadRawFile(file, reader.result);
+        
+        const updated = gallery.map(i => {
+          if (i.filename === editingItem.filename) {
+            return { ...i, src_url, filename }; 
+          }
+          return i;
+        });
+        setGallery(updated);
+        showToast('Imagen reemplazada. ¡No olvides hacer clic en GUARDAR CAMBIOS!');
+      } catch (err) {
+        console.error(err);
+        showToast(`Error al reemplazar imagen: ${err.message}`, 'error');
+      } finally {
+        setIsUploading(false);
+        setEditingItem(null);
+        if (editImageInputRef.current) editImageInputRef.current.value = '';
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Direct order input change
   const handleOrderChange = (item, newOrderStr) => {
     let newOrder = parseInt(newOrderStr);
@@ -599,6 +676,65 @@ export default function GalleryAdmin() {
       return i;
     });
     setGallery(updated);
+  };
+
+  const toggleItemProduction = (item, prod) => {
+    const updated = gallery.map(i => {
+      if (i.filename === item.filename) {
+        const prods = i.productions || [];
+        const newProds = prods.includes(prod)
+          ? prods.filter(p => p !== prod)
+          : [...prods, prod];
+        return { ...i, productions: newProds };
+      }
+      return i;
+    });
+    setGallery(updated);
+    setHasChanges(true);
+  };
+
+  // Production management
+  const handleAddProduction = async () => {
+    if (!newProductionName.trim()) return;
+    const pName = newProductionName.trim();
+    if (productionsList.includes(pName)) {
+      showToast('Esta producción ya existe.', 'error');
+      return;
+    }
+    
+    const newList = [...productionsList, pName];
+    await saveProductionsList(newList);
+  };
+
+  const handleDeleteProduction = async (prod) => {
+    if (window.confirm(`¿Seguro que deseas eliminar la producción "${prod}"?`)) {
+      const newList = productionsList.filter(p => p !== prod);
+      await saveProductionsList(newList);
+    }
+  };
+
+  const saveProductionsList = async (newList) => {
+    const url = isLocal ? '/api/productions' : '/api.php?action=productions';
+    const headers = { 'Content-Type': 'application/json' };
+    if (!isLocal) {
+      headers['X-Admin-User'] = username;
+      headers['X-Admin-Password'] = password;
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(newList)
+      });
+      if (!response.ok) throw new Error('Error al guardar producciones');
+      setProductionsList(newList);
+      setNewProductionName('');
+      showToast('Lista de producciones actualizada.');
+    } catch (err) {
+      console.error(err);
+      showToast(`Error: ${err.message}`, 'error');
+    }
   };
 
   // Filter gallery items
@@ -767,6 +903,41 @@ export default function GalleryAdmin() {
           <div className="bg-[#090909] border border-neutral-900 p-6 rounded-lg shadow-xl relative overflow-hidden group hover:border-neutral-800 transition-all duration-300">
             <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-red-950 to-transparent"></div>
             
+            <div className="mb-8 border-b border-neutral-900 pb-8">
+              <h2 className="text-xl font-bold uppercase tracking-wider text-white mb-6 font-['Oswald'] flex items-center gap-2">
+                Gestión de Producciones
+              </h2>
+              <div className="flex gap-2 mb-4">
+                <input 
+                  type="text" 
+                  value={newProductionName}
+                  onChange={(e) => setNewProductionName(e.target.value)}
+                  placeholder="Nueva producción..."
+                  className="flex-1 bg-[#0d0d0d] border border-neutral-900 focus:border-red-950 focus:outline-none p-2 text-sm text-white rounded font-sans transition-colors"
+                />
+                <button 
+                  type="button"
+                  onClick={handleAddProduction}
+                  className="px-4 py-2 bg-red-950/20 border border-red-950 text-white text-xs font-bold uppercase tracking-wider font-['Oswald'] hover:bg-red-900 transition-colors"
+                >
+                  Agregar
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {productionsList.map(prod => (
+                  <div key={prod} className="flex items-center gap-1 bg-neutral-900/40 border border-neutral-800 rounded px-2 py-1 text-xs text-neutral-300">
+                    <span>{prod}</span>
+                    <button 
+                      onClick={() => handleDeleteProduction(prod)}
+                      className="text-neutral-500 hover:text-red-400"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <h2 className="text-xl font-bold uppercase tracking-wider text-white mb-6 font-['Oswald'] flex items-center gap-2">
               <Upload size={18} className="text-red-700" /> subir nuevo trabajo
             </h2>
@@ -931,6 +1102,14 @@ export default function GalleryAdmin() {
                         className="hidden" 
                       />
 
+                      <input 
+                        type="file" 
+                        ref={editImageInputRef}
+                        onChange={handleEditImageFileChange}
+                        accept="image/*"
+                        className="hidden" 
+                      />
+
                       {videoThumbnailPreview ? (
                         <div className="relative w-full aspect-video rounded overflow-hidden bg-black flex items-center justify-center">
                           <img src={videoThumbnailPreview} alt="Thumbnail Preview" className="max-h-full max-w-full object-contain" />
@@ -997,6 +1176,32 @@ export default function GalleryAdmin() {
                       </button>
                     );
                   })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-widest text-neutral-400 font-['Oswald'] mb-3">
+                  Producciones asociadas
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {productionsList.map(prod => {
+                    const isSelected = uploadProductions.includes(prod);
+                    return (
+                      <button
+                        key={prod}
+                        type="button"
+                        onClick={() => toggleUploadProduction(prod)}
+                        className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 border rounded transition-all duration-300 font-['Oswald'] cursor-pointer ${
+                          isSelected 
+                            ? 'bg-red-950/40 border-red-800 text-white shadow-glow'
+                            : 'bg-transparent border-neutral-900 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300'
+                        }`}
+                      >
+                        {prod}
+                      </button>
+                    );
+                  })}
+                  {productionsList.length === 0 && <span className="text-xs text-neutral-600 italic">No hay producciones. Agrégalas arriba.</span>}
                 </div>
               </div>
 
@@ -1153,6 +1358,49 @@ export default function GalleryAdmin() {
                               URL: <span className="text-red-400 select-all">{item.video_url}</span>
                             </div>
                           )}
+                          
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {CATEGORIES.map(cat => {
+                              const isSelected = (item.categories || []).includes(cat);
+                              return (
+                                <button
+                                  key={cat}
+                                  type="button"
+                                  onClick={() => toggleItemCategory(item, cat)}
+                                  title={`Alternar ${CATEGORY_LABELS[cat]}`}
+                                  className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 border rounded transition-all duration-300 font-['Oswald'] cursor-pointer ${
+                                    isSelected 
+                                      ? 'bg-red-950/60 border-red-800 text-white'
+                                      : 'bg-transparent border-neutral-900 text-neutral-600 hover:border-neutral-700 hover:text-neutral-400'
+                                  }`}
+                                >
+                                  {CATEGORY_LABELS[cat]}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {productionsList.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {productionsList.map(prod => {
+                                const isSelected = (item.productions || []).includes(prod);
+                                return (
+                                  <button
+                                    key={prod}
+                                    type="button"
+                                    onClick={() => toggleItemProduction(item, prod)}
+                                    title={`Alternar ${prod}`}
+                                    className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 border rounded transition-all duration-300 font-['Oswald'] cursor-pointer ${
+                                      isSelected 
+                                        ? 'bg-red-950/60 border-red-800 text-white'
+                                        : 'bg-transparent border-neutral-900 text-neutral-600 hover:border-neutral-700 hover:text-neutral-400'
+                                    }`}
+                                  >
+                                    {prod}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -1205,6 +1453,22 @@ export default function GalleryAdmin() {
                           }`}
                         >
                           {item.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                        {/* Edit Image */}
+                        <button 
+                          onClick={() => handleEditImageClick(item)}
+                          title="Reemplazar Imagen/Miniatura"
+                          className="p-1.5 rounded border border-neutral-900 bg-[#0d0d0d] text-neutral-500 hover:bg-neutral-800 hover:text-white transition-colors ml-1"
+                        >
+                          <ImagePlus size={14} />
+                        </button>
+                        {/* Delete Item */}
+                        <button 
+                          onClick={() => handleDeleteImage(item)}
+                          title="Eliminar de la galería"
+                          className="p-1.5 rounded border border-neutral-900 bg-[#0d0d0d] text-neutral-500 hover:bg-red-950 hover:text-red-400 hover:border-red-900 transition-colors ml-1"
+                        >
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </article>

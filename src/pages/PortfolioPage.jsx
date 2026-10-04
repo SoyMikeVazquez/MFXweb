@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, X, ChevronLeft, ChevronRight, Mail, Play, Eye } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import imagesData from '../../public/imagenes web/imagenes/images_canonical.json';
+import productionsData from '../../public/imagenes web/imagenes/productions.json';
 
 /* ─── Category order matching the reference site ─────────────────────────── */
 const CATEGORY_ORDER = [
@@ -12,10 +13,9 @@ const CATEGORY_ORDER = [
   'Old Age',
   'Realistic Bodies',
   'Realistic Animals',
-  'Puppets',
+  'Puppets & Animatronics',
   'Blood Wounds',
   'Costumes Masks',
-  'Animatronics',
   'Videos',
 ];
 
@@ -27,28 +27,34 @@ const CATEGORY_LABELS = {
   'Old Age': 'OLD AGE',
   'Realistic Bodies': 'REALISTIC BODIES',
   'Realistic Animals': 'REALISTIC ANIMALS',
-  'Puppets': 'PUPPETS',
+  'Puppets & Animatronics': 'PUPPETS & ANIMATRONICS',
   'Blood Wounds': 'BLOOD & WOUNDS',
   'Costumes Masks': 'COSTUMES & MASKS',
-  'Animatronics': 'ANIMATRONICS',
   'Videos': 'VIDEOS',
 };
 
 /* ─── Prepare & filter images ─────────────────────────────────────────────── */
-function prepareImages(images, category) {
+function prepareImages(images, category, filterMode = 'category') {
   return images
     .filter((img) => {
       if (img.hidden === true) return false;
       if (!img.src_url || !img.hover_caption) return false;
       
-      if (category === 'Videos') {
+      if (category === 'Videos' && filterMode === 'category') {
         return img.is_video === true;
       }
       
       if (category === 'All') {
+        if (filterMode === 'production') {
+          return img.productions?.length > 0;
+        }
         return img.categories?.length > 0 || img.is_video === true;
       }
       
+      if (filterMode === 'production') {
+        return img.productions?.includes(category);
+      }
+
       return img.categories?.includes(category);
     })
     .sort((a, b) => {
@@ -348,6 +354,7 @@ export default function PortfolioPage() {
   const initialCategory = searchParams.get('category') || 'All';
   const validInitial = CATEGORY_ORDER.includes(initialCategory) ? initialCategory : 'All';
 
+  const [filterMode, setFilterMode] = useState('category'); // 'category' | 'production'
   const [activeCategory, setActiveCategory] = useState(validInitial);
   const [displayCategory, setDisplayCategory] = useState(validInitial);
   const [transitioning, setTransitioning] = useState(false);
@@ -356,7 +363,7 @@ export default function PortfolioPage() {
 
   const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-  const filtered = useMemo(() => prepareImages(imagesData, displayCategory), [displayCategory]);
+  const filtered = useMemo(() => prepareImages(imagesData, displayCategory, filterMode), [displayCategory, filterMode]);
 
   // Fetch views on mount
   useEffect(() => {
@@ -437,18 +444,54 @@ export default function PortfolioPage() {
         <h1 className="pf-title">GALLERY</h1>
       </header>
 
+      {/* ── Mode toggle ─────────────────────────────────────────────────── */}
+      <div className="flex justify-center gap-8 py-4 bg-transparent border-b border-neutral-900/50 relative z-10">
+        <button 
+          onClick={() => { setFilterMode('category'); handleCategory('All'); }} 
+          className={`text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] font-['Oswald'] transition-all duration-300 ${filterMode === 'category' ? 'text-red-700' : 'text-neutral-600 hover:text-neutral-300'}`}
+        >
+          Categorías
+        </button>
+        <button 
+          onClick={() => { setFilterMode('production'); handleCategory('All'); }} 
+          className={`text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] font-['Oswald'] transition-all duration-300 ${filterMode === 'production' ? 'text-red-700' : 'text-neutral-600 hover:text-neutral-300'}`}
+        >
+          Producciones
+        </button>
+      </div>
+
       {/* ── Filter bar ──────────────────────────────────────────────────── */}
       <nav className="pf-filters">
         <div className="pf-filters-inner">
-          {CATEGORY_ORDER.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => handleCategory(cat)}
-              className={`pf-filter-btn ${activeCategory === cat ? 'pf-filter-btn--on' : ''}`}
-            >
-              {CATEGORY_LABELS[cat]}
-            </button>
-          ))}
+          {filterMode === 'category' ? (
+            CATEGORY_ORDER.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => handleCategory(cat)}
+                className={`pf-filter-btn ${activeCategory === cat ? 'pf-filter-btn--on' : ''}`}
+              >
+                {CATEGORY_LABELS[cat]}
+              </button>
+            ))
+          ) : (
+            <>
+              <button
+                onClick={() => handleCategory('All')}
+                className={`pf-filter-btn ${activeCategory === 'All' ? 'pf-filter-btn--on' : ''}`}
+              >
+                TODAS
+              </button>
+              {productionsData.map((prod) => (
+                <button
+                  key={prod}
+                  onClick={() => handleCategory(prod)}
+                  className={`pf-filter-btn ${activeCategory === prod ? 'pf-filter-btn--on' : ''}`}
+                >
+                  {prod.toUpperCase()}
+                </button>
+              ))}
+            </>
+          )}
         </div>
       </nav>
 
