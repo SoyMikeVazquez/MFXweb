@@ -23,7 +23,7 @@ import ratPuppet from '../assets/Portafolio/rat_puppet.png';
 import newRealisticAnimals from '../assets/Portafolio/new_realistic_animals.png';
 import newBloodWounds from '../assets/Portafolio/new_blood_wounds.png';
 import newRealisticBodies from '../assets/Portafolio/new_realistic_bodies.jpg';
-import newRomaCharacter from '../assets/Portafolio/new_roma_character.jpg';
+import newRomaCharacter from '../assets/Portafolio/new_roma_character.png';
 import newOldAge from '../assets/Portafolio/new_old_age.jpg';
 
 // Import images from assets/UltimasProducciones
