@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Facebook, Instagram, Linkedin, Search, Globe, Video, Menu, X } from 'lucide-react';
 import { useLanguage } from '../LanguageContext';
+import mobileLogo from '../assets/mfx-logo-mobile.png';
 
 const Navbar = () => {
     const { language, toggleLanguage, t } = useLanguage();
@@ -61,9 +62,9 @@ const Navbar = () => {
                         })}
                     </nav>
 
-                    {/* Logo/Brand text for mobile only */}
-                    <div className="md:hidden text-white font-black tracking-widest text-lg">
-                        MFX
+                    {/* Logo/Brand for mobile only */}
+                    <div className="md:hidden">
+                        <img src={mobileLogo} alt="MFX Logo" className="h-10 object-contain" />
                     </div>
 
                     {/* Desktop Social / Search / Lang */}
