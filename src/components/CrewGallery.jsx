@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
-import btsCrewMonitors from '../assets/FotosDelCrew/bts-crew-monitors.png';
+import btsNew1 from '../assets/FotosDelCrew/bts-new-1.jpg';
+import btsNew2 from '../assets/FotosDelCrew/bts-new-2.jpg';
 import bts1 from '../assets/FotosDelCrew/bts-1.jpg';
-import bts2 from '../assets/FotosDelCrew/bts-2.png';
-import bts3 from '../assets/FotosDelCrew/bts-3.png';
 import img1 from '../assets/FotosDelCrew/CaracterizacionMomia.jpg';
 import img2 from '../assets/FotosDelCrew/CreacionDeHipopotamos.jpg';
 import img3 from '../assets/FotosDelCrew/DummieBebe.jpg';
@@ -27,10 +26,10 @@ const CrewGallery = () => {
     const [selectedIdx, setSelectedIdx] = useState(null);
 
     const allImages = [
-        btsCrewMonitors,
-        bts2,
+        btsNew1,
+        bts1,
         img15,
-        bts3,
+        btsNew2,
         img16,
         img1,
         img2,
