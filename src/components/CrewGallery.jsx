@@ -29,9 +29,9 @@ const CrewGallery = () => {
 
     const allImages = [
         btsNew1,
+        btsNew4,
         bts1,
         btsNew3,
-        btsNew4,
         img15,
         btsNew2,
         img16,
