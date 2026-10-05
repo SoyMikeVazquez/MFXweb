@@ -1,3 +1,5 @@
+import btsNew1 from '../assets/FotosDelCrew/bts-new-1.jpg';
+import btsNew2 from '../assets/FotosDelCrew/bts-new-2.jpg';
 import bts1 from '../assets/FotosDelCrew/bts-1.jpg';
 import bts2 from '../assets/FotosDelCrew/bts-2.png';
 import bts3 from '../assets/FotosDelCrew/bts-3.png';
@@ -22,10 +24,12 @@ import { useLanguage } from '../LanguageContext';
 const CrewGallery = () => {
     const { t } = useLanguage();
     const allImages = [
+        btsNew1,
         bts1,
         bts2,
-        bts3,
         img15,
+        btsNew2,
+        bts3,
         img16,
         img1,
         img2,

@@ -15,7 +15,9 @@ export const translations = {
         },
         about: {
             studio: 'The Studio',
-            crewTitle: 'Crew',
+            titleLight: 'ABOUT',
+            titleBold: 'US',
+            crewTitle: 'About Us',
             pause: 'Pause',
             autoScroll: 'Auto-Scroll',
             text: [
@@ -127,7 +129,9 @@ export const translations = {
         },
         about: {
             studio: 'El Estudio',
-            crewTitle: 'Crew',
+            titleLight: 'SOBRE',
+            titleBold: 'NOSOTROS',
+            crewTitle: 'Sobre Nosotros',
             pause: 'Pausar',
             autoScroll: 'Auto-Scroll',
             text: [

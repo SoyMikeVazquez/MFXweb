@@ -75,7 +75,7 @@ const About = () => {
                         </div>
 
                         <h2 className="text-4xl md:text-5xl font-light mb-10 text-white uppercase leading-tight tracking-tight">
-                            MFX <span className="font-bold">{t('about', 'crewTitle')}</span>
+                            {t('about', 'titleLight')} <span className="font-bold">{t('about', 'titleBold')}</span>
                         </h2>
 
                         <div className="relative group">
