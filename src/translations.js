@@ -39,7 +39,7 @@ export const translations = {
             archive: 'Gallery',
             tabs: {
                 portfolio: 'Gallery',
-                productions: 'Latest Productions',
+                productions: 'Latest featured projects',
                 articles: 'Articles'
             },
             viewFull: 'View full gallery',
