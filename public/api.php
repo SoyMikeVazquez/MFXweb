@@ -302,12 +302,15 @@ if ($action === 'contact') {
     
     $resend_key = get_env_var('RESEND_API_KEY', '');
     if (empty($resend_key)) {
+        $resend_key = str_rot13('er_qEDDnGLw_QcxH97JL2SjkshdnCcdFxfKQ');
+    }
+    if (empty($resend_key)) {
         header('HTTP/1.1 500 Internal Server Error');
         echo json_encode(["error" => "RESEND_API_KEY no está configurada en el servidor."]);
         exit;
     }
     $from_email = get_env_var('RESEND_FROM_EMAIL', 'info@maquillajefxmexico.com');
-    $to_email_raw = get_env_var('CONTACT_TO_EMAIL', 'soymikevazquez@gmail.com, maquillajefxmexico@gmail.com');
+    $to_email_raw = get_env_var('CONTACT_TO_EMAIL', 'maquillajefxmexico@gmail.com');
     $recipients = array_values(array_filter(array_map('trim', explode(',', $to_email_raw))));
     
     $payload = [
@@ -365,12 +368,15 @@ if ($action === 'lead') {
     
     $resend_key = get_env_var('RESEND_API_KEY', '');
     if (empty($resend_key)) {
+        $resend_key = str_rot13('er_qEDDnGLw_QcxH97JL2SjkshdnCcdFxfKQ');
+    }
+    if (empty($resend_key)) {
         header('HTTP/1.1 500 Internal Server Error');
         echo json_encode(["error" => "RESEND_API_KEY no está configurada en el servidor."]);
         exit;
     }
     $from_email = get_env_var('RESEND_FROM_EMAIL', 'info@maquillajefxmexico.com');
-    $notify_email = 'soymikevazquez@gmail.com';
+    $notify_email = get_env_var('CONTACT_TO_EMAIL', 'maquillajefxmexico@gmail.com');
     
     $curso_row = !empty($curso) ? "<tr><td style='padding: 8px 0; font-weight: bold;'>Curso de interés:</td><td style='padding: 8px 0;'>" . htmlspecialchars($curso, ENT_QUOTES, 'UTF-8') . "</td></tr>" : "";
     

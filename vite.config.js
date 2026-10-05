@@ -204,7 +204,7 @@ function galleryAdminPlugin(env = {}) {
 
             const resendApiKey = env.RESEND_API_KEY || process.env.RESEND_API_KEY;
             const fromEmail = env.RESEND_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || 'info@maquillajefxmexico.com';
-            const toEmailRaw = env.CONTACT_TO_EMAIL || process.env.CONTACT_TO_EMAIL || 'soymikevazquez@gmail.com';
+            const toEmailRaw = env.CONTACT_TO_EMAIL || process.env.CONTACT_TO_EMAIL || 'maquillajefxmexico@gmail.com';
             const recipients = toEmailRaw.split(',').map(e => e.trim()).filter(Boolean);
 
             if (!resendApiKey) {
@@ -267,7 +267,7 @@ function galleryAdminPlugin(env = {}) {
 
             const resendApiKey = env.RESEND_API_KEY || process.env.RESEND_API_KEY;
             const fromEmail = env.RESEND_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || 'info@maquillajefxmexico.com';
-            const notifyEmail = 'soymikevazquez@gmail.com';
+            const notifyEmail = env.CONTACT_TO_EMAIL || process.env.CONTACT_TO_EMAIL || 'maquillajefxmexico@gmail.com';
 
             if (resendApiKey) {
               await fetch('https://api.resend.com/emails', {
