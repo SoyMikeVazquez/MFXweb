@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
-import btsNew1 from '../assets/FotosDelCrew/bts-new-1.jpg';
+import btsNew1 from '../assets/FotosDelCrew/bts-new-1.png';
 import btsNew2 from '../assets/FotosDelCrew/bts-new-2.jpg';
 import bts1 from '../assets/FotosDelCrew/bts-1.jpg';
 import bts2 from '../assets/FotosDelCrew/bts-2.png';
@@ -102,12 +102,12 @@ const CrewGallery = () => {
                         <div 
                             key={idx} 
                             onClick={() => setSelectedIdx(idx)}
-                            className="w-[190px] sm:w-[230px] md:w-[270px] aspect-square overflow-hidden group border-r border-b border-neutral-800 flex-shrink-0 cursor-zoom-in relative bg-neutral-950"
+                            className="h-[190px] sm:h-[230px] md:h-[270px] overflow-hidden group border-r border-b border-neutral-800 flex-shrink-0 cursor-zoom-in relative bg-neutral-950"
                         >
                             <img
                                 src={img}
                                 alt={`Crew work ${idx + 1}`}
-                                className="w-full h-full object-cover transition-all duration-700 group-hover:scale-108"
+                                className="h-full w-auto object-cover transition-all duration-700 group-hover:scale-108"
                                 loading="lazy"
                             />
                             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors pointer-events-none" />
