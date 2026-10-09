@@ -45,7 +45,6 @@ const Interviews = () => {
     const videos = [
         { id: '2dVusOUtkvg', title: 'Interview 1' },
         { id: '9s82gJGASxc', title: 'Interview 2' },
-        { id: 'sbbyPO_rQlQ', title: 'Interview 3' },
     ];
 
     return (
@@ -62,7 +61,7 @@ const Interviews = () => {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
                     {videos.map((video, index) => (
                         <div key={index} className="flex flex-col">
                             <VideoThumbnail videoId={video.id} title={video.title} />
