@@ -203,6 +203,7 @@ if ($action === 'upload') {
     $base64Data = isset($data['base64Data']) ? $data['base64Data'] : '';
     $hover_caption = isset($data['hover_caption']) ? $data['hover_caption'] : '';
     $categories = isset($data['categories']) ? $data['categories'] : [];
+    $productions = isset($data['productions']) ? $data['productions'] : [];
     
     if (empty($filename) || empty($base64Data)) {
         header('HTTP/1.1 400 Bad Request');
@@ -267,6 +268,7 @@ if ($action === 'upload') {
         "filename" => $filename,
         "hover_caption" => empty($hover_caption) ? pathinfo($filename, PATHINFO_FILENAME) : $hover_caption,
         "categories" => $categories,
+        "productions" => $productions,
         "order" => $maxOrder + 1
     ];
     

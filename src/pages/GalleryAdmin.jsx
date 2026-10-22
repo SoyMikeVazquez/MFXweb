@@ -74,8 +74,10 @@ export default function GalleryAdmin() {
   };
 
   // State for upload form
-  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadPreviews, setUploadPreviews] = useState([]); // array of preview URLs
+  const [uploadFile, setUploadFile] = useState(null); // first selected file for compatibility
   const [uploadPreview, setUploadPreview] = useState('');
+  const [uploadFiles, setUploadFiles] = useState([]); // array of File objects
   const [uploadCaption, setUploadCaption] = useState('');
   const [uploadCategories, setUploadCategories] = useState([]);
   const [uploadProductions, setUploadProductions] = useState([]);
@@ -202,24 +204,44 @@ export default function GalleryAdmin() {
     showToast('Sesión cerrada correctamente.');
   };
 
-  // Handle file select
+  // Handle file select (supports multiple files)
   const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
 
-    if (!file.type.startsWith('image/')) {
-      showToast('Por favor, selecciona un archivo de imagen válido.', 'error');
+    // Filter only image files
+    const imageFiles = files.filter(f => f.type.startsWith('image/'));
+    if (imageFiles.length === 0) {
+      showToast('Solo se permiten archivos de imagen.', 'error');
       return;
     }
+    if (imageFiles.length !== files.length) {
+      showToast('Algunos archivos no son imágenes y fueron ignorados.', 'error');
+    }
 
-    setUploadFile(file);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setUploadPreview(reader.result);
-    };
-    reader.readAsDataURL(file);
-    const baseName = file.name.split('.')[0].replace(/[_-]/g, ' ');
-    setUploadCaption(baseName.charAt(0).toUpperCase() + baseName.slice(1));
+    // Append to existing selection (allows adding more files)
+    const newFiles = [...uploadFiles, ...imageFiles];
+    setUploadFiles(newFiles);
+    setUploadFile(newFiles[0]); // keep first for compatibility
+
+    // Generate preview for each new file
+    imageFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setUploadPreviews(prev => [...prev, reader.result]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Set uploadPreview to first file for backward compat
+    if (uploadFiles.length === 0) {
+      const first = imageFiles[0];
+      const previewReader = new FileReader();
+      previewReader.onloadend = () => setUploadPreview(previewReader.result);
+      previewReader.readAsDataURL(first);
+      const baseName = first.name.split('.')[0].replace(/[_-]/g, ' ');
+      setUploadCaption(baseName.charAt(0).toUpperCase() + baseName.slice(1));
+    }
   };
 
   const handleVideoFileChange = (e) => {
@@ -323,55 +345,81 @@ export default function GalleryAdmin() {
 
     try {
       if (uploadType === 'image') {
-        // --- Standard Image Upload ---
-        if (!uploadFile) {
-          showToast('Selecciona una imagen primero.', 'error');
+        // --- Batch Image Upload ---
+        if (uploadFiles.length === 0) {
+          showToast('Selecciona al menos una imagen primero.', 'error');
           setIsUploading(false);
           return;
         }
 
-        const base64Data = uploadPreview.split(',')[1];
-        const payload = {
-          filename: uploadFile.name,
-          base64Data,
-          hover_caption: uploadCaption,
-          categories: uploadCategories,
-          productions: uploadProductions
-        };
+        let successCount = 0;
+        let errorCount = 0;
 
-        const url = isLocal ? '/api/upload' : '/api.php?action=upload';
-        const headers = { 'Content-Type': 'application/json' };
-        if (!isLocal) {
-          headers['X-Admin-User'] = username;
-          headers['X-Admin-Password'] = password;
+        for (let i = 0; i < uploadFiles.length; i++) {
+          try {
+            // Read file as base64
+            const file = uploadFiles[i];
+            const base64Preview = uploadPreviews[i];
+            if (!base64Preview) continue;
+
+            const base64Data = base64Preview.split(',')[1];
+            const payload = {
+              filename: file.name,
+              base64Data,
+              hover_caption: uploadCaption,
+              categories: uploadCategories,
+              productions: uploadProductions
+            };
+
+            const url = isLocal ? '/api/upload' : '/api.php?action=upload';
+            const headers = { 'Content-Type': 'application/json' };
+            if (!isLocal) {
+              headers['X-Admin-User'] = username;
+              headers['X-Admin-Password'] = password;
+            }
+
+            const response = await fetch(url, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({}));
+              throw new Error(errorData.error || `Error del servidor (${response.status})`);
+            }
+
+            const resData = await response.json();
+            if (resData.error) throw new Error(resData.error);
+
+            const newEntry = resData.data;
+            setGallery(prev => [...prev, newEntry].sort((a, b) => (a.order || 0) - (b.order || 0)));
+            successCount++;
+
+            if (uploadFiles.length > 1) {
+              showToast(`Subiendo imagen ${i + 1} de ${uploadFiles.length}...`);
+            }
+          } catch (fileErr) {
+            console.error(`Error uploading file ${uploadFiles[i]?.name}:`, fileErr);
+            errorCount++;
+          }
         }
-
-        const response = await fetch(url, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || `Error del servidor (${response.status})`);
-        }
-
-        const resData = await response.json();
-        if (resData.error) throw new Error(resData.error);
-
-        const newEntry = resData.data;
-        setGallery(prev => [...prev, newEntry].sort((a, b) => (a.order || 0) - (b.order || 0)));
         
         // Reset image upload fields
         setUploadFile(null);
+        setUploadFiles([]);
         setUploadPreview('');
+        setUploadPreviews([]);
         setUploadCaption('');
         setUploadCategories([]);
         setUploadProductions([]);
         if (fileInputRef.current) fileInputRef.current.value = '';
         
-        showToast('Imagen subida y agregada con éxito a la gallery.');
+        if (errorCount > 0) {
+          showToast(`${successCount} imagen(es) subida(s), ${errorCount} error(es).`, 'error');
+        } else {
+          showToast(`${successCount} imagen(es) subida(s) con éxito.`);
+        }
 
       } else {
         // --- Video Upload ---
@@ -971,43 +1019,90 @@ export default function GalleryAdmin() {
             <form onSubmit={handleUploadSubmit} className="space-y-6">
               
               {uploadType === 'image' ? (
-                /* --- Image Dropzone --- */
-                <div 
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 bg-[#0d0d0d]/40 ${
-                    uploadPreview ? 'border-red-900/60 bg-red-950/5' : 'border-neutral-800 hover:border-red-950 hover:bg-red-950/5'
-                  }`}
-                >
-                  <input 
-                    type="file" 
-                    ref={fileInputRef}
-                    onChange={handleFileChange}
-                    accept="image/*"
-                    className="hidden" 
-                  />
+                /* --- Image Dropzone (supports multiple) --- */
+                <div className="space-y-3">
+                  <div 
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 bg-[#0d0d0d]/40 ${
+                      uploadPreviews.length > 0 ? 'border-red-900/60 bg-red-950/5' : 'border-neutral-800 hover:border-red-950 hover:bg-red-950/5'
+                    }`}
+                  >
+                    <input 
+                      type="file" 
+                      ref={fileInputRef}
+                      onChange={handleFileChange}
+                      accept="image/*"
+                      multiple
+                      className="hidden" 
+                    />
 
-                  {uploadPreview ? (
-                    <div className="relative w-full aspect-video rounded overflow-hidden bg-black flex items-center justify-center">
-                      <img src={uploadPreview} alt="Preview" className="max-h-full max-w-full object-contain" />
-                      <button 
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setUploadFile(null);
-                          setUploadPreview('');
-                          if (fileInputRef.current) fileInputRef.current.value = '';
-                        }}
-                        className="absolute top-2 right-2 bg-black/80 hover:bg-red-900 border border-neutral-800 p-1 rounded-full text-white transition-colors"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="text-center py-4">
-                      <Upload size={32} className="mx-auto text-neutral-600 mb-3 group-hover:text-red-800 transition-colors" />
-                      <p className="text-sm font-semibold text-neutral-300 uppercase font-['Oswald'] tracking-wider">Seleccionar Imagen</p>
-                      <p className="text-xs text-neutral-500 mt-2">Arrastra tu archivo aquí o haz clic para buscar</p>
-                    </div>
+                    {uploadPreviews.length > 0 ? (
+                      <div className="w-full space-y-3">
+                        {/* Thumbnail grid */}
+                        <div className={`grid gap-2 w-full ${uploadPreviews.length === 1 ? 'grid-cols-1' : uploadPreviews.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                          {uploadPreviews.map((src, idx) => (
+                            <div key={idx} className="relative aspect-square rounded overflow-hidden bg-black flex items-center justify-center group">
+                              <img src={src} alt={`Preview ${idx + 1}`} className="max-h-full max-w-full object-cover w-full h-full" />
+                              <button 
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setUploadFiles(prev => prev.filter((_, i) => i !== idx));
+                                  setUploadPreviews(prev => prev.filter((_, i) => i !== idx));
+                                  // Update uploadFile/uploadPreview for compatibility
+                                  if (idx === 0) {
+                                    const remaining = uploadFiles.filter((_, i) => i !== 0);
+                                    setUploadFile(remaining[0] || null);
+                                    const remainingPreviews = uploadPreviews.filter((_, i) => i !== 0);
+                                    setUploadPreview(remainingPreviews[0] || '');
+                                  }
+                                  if (fileInputRef.current) fileInputRef.current.value = '';
+                                }}
+                                className="absolute top-1 right-1 bg-black/80 hover:bg-red-900 border border-neutral-800 p-1 rounded-full text-white transition-colors opacity-0 group-hover:opacity-100"
+                              >
+                                <X size={12} />
+                              </button>
+                              <div className="absolute bottom-1 left-1 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded font-['Oswald']">
+                                {idx + 1}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Summary + add more */}
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-neutral-400 font-['Oswald'] uppercase tracking-wider">
+                            {uploadPreviews.length} imagen{uploadPreviews.length > 1 ? 'es' : ''} seleccionada{uploadPreviews.length > 1 ? 's' : ''}
+                          </p>
+                          <span className="text-xs text-red-700 hover:text-red-500 font-['Oswald'] uppercase tracking-wider">
+                            + Agregar más
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-4">
+                        <Upload size={32} className="mx-auto text-neutral-600 mb-3 group-hover:text-red-800 transition-colors" />
+                        <p className="text-sm font-semibold text-neutral-300 uppercase font-['Oswald'] tracking-wider">Seleccionar Imágenes</p>
+                        <p className="text-xs text-neutral-500 mt-2">Arrastra tus archivos aquí o haz clic para buscar</p>
+                        <p className="text-xs text-red-800/60 mt-1 font-['Oswald'] uppercase tracking-wider">Puedes seleccionar varias a la vez</p>
+                      </div>
+                    )}
+                  </div>
+                  {/* Clear all button when files selected */}
+                  {uploadPreviews.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUploadFiles([]);
+                        setUploadPreviews([]);
+                        setUploadFile(null);
+                        setUploadPreview('');
+                        setUploadCaption('');
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}
+                      className="w-full text-xs text-neutral-500 hover:text-red-500 font-['Oswald'] uppercase tracking-wider py-1 transition-colors"
+                    >
+                      Quitar todas las imágenes
+                    </button>
                   )}
                 </div>
               ) : (

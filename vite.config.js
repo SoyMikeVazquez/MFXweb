@@ -119,7 +119,7 @@ function galleryAdminPlugin(env = {}) {
               req.on('error', reject);
             });
 
-            const { filename, base64Data, hover_caption, categories } = JSON.parse(body);
+            const { filename, base64Data, hover_caption, categories, productions } = JSON.parse(body);
             if (!filename || !base64Data) {
               res.writeHead(400, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ error: 'Missing filename or base64Data' }));
@@ -169,6 +169,7 @@ function galleryAdminPlugin(env = {}) {
               filename: filename,
               hover_caption: hover_caption || filename.split('.')[0],
               categories: categories || [],
+              productions: productions || [],
               order: maxOrder + 1
             };
 
