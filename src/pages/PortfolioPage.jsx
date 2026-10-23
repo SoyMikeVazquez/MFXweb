@@ -34,7 +34,7 @@ const CATEGORY_LABELS = {
 };
 
 /* ─── Prepare & filter images ─────────────────────────────────────────────── */
-function prepareImages(images, category, filterMode = 'category') {
+function prepareImages(images, category, filterMode = 'category', subCategory = 'All') {
   return images
     .filter((img) => {
       if (img.hidden === true) return false;
@@ -52,7 +52,12 @@ function prepareImages(images, category, filterMode = 'category') {
       }
       
       if (filterMode === 'production') {
-        return img.productions?.includes(category);
+        const inProd = img.productions?.includes(category);
+        if (!inProd) return false;
+        if (subCategory && subCategory !== 'All') {
+          return img.categories?.includes(subCategory);
+        }
+        return true;
       }
 
       return img.categories?.includes(category);
@@ -394,13 +399,22 @@ export default function PortfolioPage() {
   const [filterMode, setFilterMode] = useState('category'); // 'category' | 'production'
   const [activeCategory, setActiveCategory] = useState(validInitial);
   const [displayCategory, setDisplayCategory] = useState(validInitial);
+  const [subCategory, setSubCategory] = useState('All');
   const [transitioning, setTransitioning] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(null);
   const [views, setViews] = useState({});
 
   const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-  const filtered = useMemo(() => prepareImages(imagesData, displayCategory, filterMode), [displayCategory, filterMode]);
+  const currentProdObj = useMemo(() => {
+    if (filterMode !== 'production' || displayCategory === 'All') return null;
+    return productionsData.find(p => (typeof p === 'string' ? p : p?.name) === displayCategory) || null;
+  }, [filterMode, displayCategory]);
+
+  const filtered = useMemo(
+    () => prepareImages(imagesData, displayCategory, filterMode, subCategory),
+    [displayCategory, filterMode, subCategory]
+  );
 
   // Fetch views on mount
   useEffect(() => {
@@ -453,6 +467,7 @@ export default function PortfolioPage() {
     if (cat === activeCategory || transitioning) return;
     setTransitioning(true);
     setActiveCategory(cat);
+    setSubCategory('All');
     setTimeout(() => {
       setDisplayCategory(cat);
       setTransitioning(false);
@@ -523,19 +538,54 @@ export default function PortfolioPage() {
               >
                 TODAS
               </button>
-              {productionsData.map((prod) => (
-                <button
-                  key={prod}
-                  onClick={() => handleCategory(prod)}
-                  className={`pf-filter-btn ${activeCategory === prod ? 'pf-filter-btn--on' : ''}`}
-                >
-                  {prod.toUpperCase()}
-                </button>
-              ))}
+              {productionsData.map((prod) => {
+                const prodName = typeof prod === 'string' ? prod : prod?.name || '';
+                return (
+                  <button
+                    key={prodName}
+                    onClick={() => handleCategory(prodName)}
+                    className={`pf-filter-btn ${activeCategory === prodName ? 'pf-filter-btn--on' : ''}`}
+                  >
+                    {prodName.toUpperCase()}
+                  </button>
+                );
+              })}
             </>
           )}
         </div>
       </nav>
+
+      {/* ── Subcategories Bar for Active Production ─────────────────────── */}
+      {filterMode === 'production' && displayCategory !== 'All' && currentProdObj?.categories?.length > 0 && (
+        <div className="bg-[#080808] border-b border-neutral-900 py-2.5 px-6 flex items-center justify-center gap-2 flex-wrap">
+          <span className="text-[10px] uppercase font-['Oswald'] text-neutral-500 tracking-widest mr-2">
+            Categorías:
+          </span>
+          <button
+            onClick={() => setSubCategory('All')}
+            className={`text-[10px] font-['Oswald'] font-bold uppercase tracking-wider px-2.5 py-1 rounded transition-colors ${
+              subCategory === 'All'
+                ? 'bg-red-950 text-white border border-red-800'
+                : 'text-neutral-400 hover:text-white border border-neutral-900 bg-black/40'
+            }`}
+          >
+            Todas
+          </button>
+          {currentProdObj.categories.map((c) => (
+            <button
+              key={c}
+              onClick={() => setSubCategory(c)}
+              className={`text-[10px] font-['Oswald'] font-bold uppercase tracking-wider px-2.5 py-1 rounded transition-colors ${
+                subCategory === c
+                  ? 'bg-red-950 text-white border border-red-800'
+                  : 'text-neutral-400 hover:text-white border border-neutral-900 bg-black/40'
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── Grid ────────────────────────────────────────────────────────── */}
       <main className={`pf-grid-wrap ${transitioning ? 'pf-grid-wrap--fade' : ''}`}>
@@ -543,7 +593,7 @@ export default function PortfolioPage() {
         <div className={`pf-grid ${displayCategory === 'Videos' ? 'pf-grid--videos' : ''}`}>
           {filtered.map((img, idx) => (
             <GalleryItem
-              key={`${displayCategory}-${img.filename}-${img.order ?? idx}`}
+              key={`${displayCategory}-${subCategory}-${img.filename}-${img.order ?? idx}`}
               img={img}
               index={idx}
               onClick={openLb}

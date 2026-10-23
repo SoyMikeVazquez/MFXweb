@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -17,7 +17,17 @@ import {
   Video,
   LogOut,
   Trash2,
-  ImagePlus
+  ImagePlus,
+  Film,
+  LayoutGrid,
+  Tag,
+  Plus,
+  Edit2,
+  FolderPlus,
+  Link2,
+  Unlink,
+  Layers,
+  Sparkles
 } from 'lucide-react';
 import initialImagesData from '../../public/imagenes web/imagenes/images_canonical.json';
 import initialProductionsData from '../../public/imagenes web/imagenes/productions.json';
@@ -44,9 +54,47 @@ const CATEGORY_LABELS = {
   'Costumes Masks': 'COSTUMES & MASKS',
 };
 
+// Normalize productions to object form { name: string, categories: string[], description?: string }
+const normalizeProductions = (list) => {
+  if (!Array.isArray(list)) return [];
+  return list.map(item => {
+    if (typeof item === 'string') {
+      return { name: item, categories: [], description: '' };
+    }
+    return {
+      name: item.name || '',
+      categories: Array.isArray(item.categories) ? item.categories : [],
+      description: item.description || ''
+    };
+  }).filter(p => p.name.trim().length > 0);
+};
+
 export default function GalleryAdmin() {
   const [gallery, setGallery] = useState([]);
-  const [productionsList, setProductionsList] = useState(initialProductionsData || []);
+  const [productionsList, setProductionsList] = useState(() => normalizeProductions(initialProductionsData));
+  const [activeAdminScreen, setActiveAdminScreen] = useState('gallery'); // 'gallery' | 'productions'
+
+  // Productions screen specific states
+  const [selectedProdName, setSelectedProdName] = useState(() => {
+    const list = normalizeProductions(initialProductionsData);
+    return list[0]?.name || '';
+  });
+  const [newProdNameInput, setNewProdNameInput] = useState('');
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [searchProdQuery, setSearchProdQuery] = useState('');
+  const [selectedProdCatFilter, setSelectedProdCatFilter] = useState('All');
+  const [editingProdName, setEditingProdName] = useState(null); // { oldName, newName }
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignSearch, setAssignSearch] = useState('');
+
+  // Production batch upload form states
+  const [prodUploadFiles, setProdUploadFiles] = useState([]);
+  const [prodUploadPreviews, setProdUploadPreviews] = useState([]);
+  const [prodUploadCaption, setProdUploadCaption] = useState('');
+  const [prodUploadCategories, setProdUploadCategories] = useState([]);
+  const [isProdUploading, setIsProdUploading] = useState(false);
+  const prodFileInputRef = useRef(null);
+
   const [newProductionName, setNewProductionName] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -741,26 +789,7 @@ export default function GalleryAdmin() {
     setHasChanges(true);
   };
 
-  // Production management
-  const handleAddProduction = async () => {
-    if (!newProductionName.trim()) return;
-    const pName = newProductionName.trim();
-    if (productionsList.includes(pName)) {
-      showToast('Esta producción ya existe.', 'error');
-      return;
-    }
-    
-    const newList = [...productionsList, pName];
-    await saveProductionsList(newList);
-  };
-
-  const handleDeleteProduction = async (prod) => {
-    if (window.confirm(`¿Seguro que deseas eliminar la producción "${prod}"?`)) {
-      const newList = productionsList.filter(p => p !== prod);
-      await saveProductionsList(newList);
-    }
-  };
-
+  // Save productions list helper (stores normalized objects array)
   const saveProductionsList = async (newList) => {
     const url = isLocal ? '/api/productions' : '/api.php?action=productions';
     const headers = { 'Content-Type': 'application/json' };
@@ -778,12 +807,256 @@ export default function GalleryAdmin() {
       if (!response.ok) throw new Error('Error al guardar producciones');
       setProductionsList(newList);
       setNewProductionName('');
-      showToast('Lista de producciones actualizada.');
+      setNewProdNameInput('');
+      showToast('Producciones actualizadas con éxito.');
     } catch (err) {
       console.error(err);
       showToast(`Error: ${err.message}`, 'error');
     }
   };
+
+  // Add production (from original box or new screen)
+  const handleCreateProduction = async (nameToCreate) => {
+    const pName = (nameToCreate || newProdNameInput || newProductionName).trim();
+    if (!pName) {
+      showToast('Ingresa un nombre para la producción.', 'error');
+      return;
+    }
+    if (productionsList.some(p => p.name.toLowerCase() === pName.toLowerCase())) {
+      showToast('Esta producción ya existe.', 'error');
+      return;
+    }
+    
+    const newProd = { name: pName, categories: [], description: '' };
+    const newList = [...productionsList, newProd];
+    await saveProductionsList(newList);
+    setSelectedProdName(pName);
+    setNewProdNameInput('');
+    setNewProductionName('');
+  };
+
+  const handleAddProduction = handleCreateProduction;
+
+  // Delete production
+  const handleDeleteProduction = async (prodName) => {
+    if (!window.confirm(`¿Seguro que deseas eliminar la producción "${prodName}"?\nLas fotos se mantendrán en la galería pero se les removerá la asignación de esta producción.`)) {
+      return;
+    }
+    const newList = productionsList.filter(p => p.name !== prodName);
+    await saveProductionsList(newList);
+    // Remove from gallery items
+    setGallery(prev => prev.map(item => {
+      if ((item.productions || []).includes(prodName)) {
+        return {
+          ...item,
+          productions: item.productions.filter(p => p !== prodName)
+        };
+      }
+      return item;
+    }));
+    setHasChanges(true);
+    if (selectedProdName === prodName) {
+      setSelectedProdName(newList[0]?.name || '');
+    }
+    showToast(`Producción "${prodName}" eliminada.`);
+  };
+
+  // Rename production
+  const handleRenameProduction = async (oldName, newName) => {
+    const clean = newName.trim();
+    if (!clean || clean === oldName) {
+      setEditingProdName(null);
+      return;
+    }
+    if (productionsList.some(p => p.name.toLowerCase() === clean.toLowerCase() && p.name !== oldName)) {
+      showToast('Ya existe otra producción con ese nombre.', 'error');
+      return;
+    }
+    const newList = productionsList.map(p => p.name === oldName ? { ...p, name: clean } : p);
+    await saveProductionsList(newList);
+    setGallery(prev => prev.map(item => {
+      if ((item.productions || []).includes(oldName)) {
+        return {
+          ...item,
+          productions: item.productions.map(p => p === oldName ? clean : p)
+        };
+      }
+      return item;
+    }));
+    setHasChanges(true);
+    if (selectedProdName === oldName) {
+      setSelectedProdName(clean);
+    }
+    setEditingProdName(null);
+    showToast(`Producción renombrada a "${clean}".`);
+  };
+
+  // Category management within active production
+  const handleAddCategoryToActiveProd = async (e) => {
+    if (e) e.preventDefault();
+    const cleanCat = newCategoryName.trim();
+    if (!cleanCat) return;
+    if (!selectedProdName) {
+      showToast('Selecciona una producción primero.', 'error');
+      return;
+    }
+    const currentProd = productionsList.find(p => p.name === selectedProdName);
+    if (!currentProd) return;
+    if (currentProd.categories.includes(cleanCat)) {
+      showToast('Esta categoría ya está agregada en esta producción.', 'error');
+      return;
+    }
+    const updated = [...currentProd.categories, cleanCat];
+    const newList = productionsList.map(p => p.name === selectedProdName ? { ...p, categories: updated } : p);
+    await saveProductionsList(newList);
+    setNewCategoryName('');
+    showToast(`Categoría "${cleanCat}" agregada a ${selectedProdName}.`);
+  };
+
+  const handleDeleteCategoryFromActiveProd = async (catName) => {
+    if (!window.confirm(`¿Eliminar la categoría "${catName}" de ${selectedProdName}?`)) return;
+    const currentProd = productionsList.find(p => p.name === selectedProdName);
+    if (!currentProd) return;
+    const updated = currentProd.categories.filter(c => c !== catName);
+    const newList = productionsList.map(p => p.name === selectedProdName ? { ...p, categories: updated } : p);
+    await saveProductionsList(newList);
+    showToast(`Categoría "${catName}" eliminada de ${selectedProdName}.`);
+  };
+
+  // Toggle production category on upload form
+  const toggleProdUploadCategory = (cat) => {
+    if (prodUploadCategories.includes(cat)) {
+      setProdUploadCategories(prodUploadCategories.filter(c => c !== cat));
+    } else {
+      setProdUploadCategories([...prodUploadCategories, cat]);
+    }
+  };
+
+  // Handle files selected for production upload
+  const handleProdFileChange = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+    const imageFiles = files.filter(f => f.type.startsWith('image/'));
+    if (imageFiles.length === 0) {
+      showToast('Solo se permiten archivos de imagen.', 'error');
+      return;
+    }
+    const newFiles = [...prodUploadFiles, ...imageFiles];
+    setProdUploadFiles(newFiles);
+    imageFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProdUploadPreviews(prev => [...prev, reader.result]);
+      };
+      reader.readAsDataURL(file);
+    });
+    if (prodUploadFiles.length === 0) {
+      const first = imageFiles[0];
+      const baseName = first.name.split('.')[0].replace(/[_-]/g, ' ');
+      setProdUploadCaption(baseName.charAt(0).toUpperCase() + baseName.slice(1));
+    }
+  };
+
+  // Submit batch upload directly to selected production
+  const handleProdUploadSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedProdName) {
+      showToast('Selecciona o crea una producción primero.', 'error');
+      return;
+    }
+    if (prodUploadFiles.length === 0) {
+      showToast('Selecciona al menos una imagen.', 'error');
+      return;
+    }
+    if (!isLocal && (!username || !password)) {
+      showToast('Credenciales requeridas en producción.', 'error');
+      return;
+    }
+
+    setIsProdUploading(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (let i = 0; i < prodUploadFiles.length; i++) {
+      try {
+        const file = prodUploadFiles[i];
+        const base64Preview = prodUploadPreviews[i];
+        if (!base64Preview) continue;
+        const base64Data = base64Preview.split(',')[1];
+        const payload = {
+          filename: file.name,
+          base64Data,
+          hover_caption: prodUploadCaption || file.name.split('.')[0],
+          categories: prodUploadCategories,
+          productions: [selectedProdName]
+        };
+
+        const url = isLocal ? '/api/upload' : '/api.php?action=upload';
+        const headers = { 'Content-Type': 'application/json' };
+        if (!isLocal) {
+          headers['X-Admin-User'] = username;
+          headers['X-Admin-Password'] = password;
+        }
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || `Error ${response.status}`);
+        }
+
+        const resData = await response.json();
+        if (resData.error) throw new Error(resData.error);
+
+        const newEntry = resData.data;
+        setGallery(prev => [...prev, newEntry].sort((a, b) => (a.order || 0) - (b.order || 0)));
+        successCount++;
+      } catch (err) {
+        console.error(`Error uploading ${prodUploadFiles[i]?.name}:`, err);
+        errorCount++;
+      }
+    }
+
+    setProdUploadFiles([]);
+    setProdUploadPreviews([]);
+    setProdUploadCaption('');
+    setProdUploadCategories([]);
+    if (prodFileInputRef.current) prodFileInputRef.current.value = '';
+    setIsProdUploading(false);
+
+    if (errorCount > 0) {
+      showToast(`${successCount} subida(s), ${errorCount} error(es).`, 'error');
+    } else {
+      showToast(`${successCount} imagen(es) subida(s) a "${selectedProdName}".`);
+    }
+  };
+
+  // Toggle image assignment to a production
+  const toggleImageProductionAssignment = (item, prodName) => {
+    const prods = item.productions || [];
+    const hasProd = prods.includes(prodName);
+    const newProds = hasProd ? prods.filter(p => p !== prodName) : [...prods, prodName];
+    setGallery(prev => prev.map(g => g.filename === item.filename ? { ...g, productions: newProds } : g));
+    setHasChanges(true);
+  };
+
+  const activeProd = productionsList.find(p => p.name === selectedProdName) || null;
+  const activeProdCategories = activeProd ? activeProd.categories : [];
+
+  // All images belonging to active production
+  const activeProdImages = gallery.filter(item => (item.productions || []).includes(selectedProdName));
+
+  // Filtered by category filter + search query
+  const filteredProdImages = activeProdImages.filter(item => {
+    const matchesSearch = item.hover_caption?.toLowerCase().includes(searchProdQuery.toLowerCase()) || 
+                          item.filename?.toLowerCase().includes(searchProdQuery.toLowerCase());
+    if (selectedProdCatFilter === 'All') return matchesSearch;
+    return matchesSearch && (item.categories || []).includes(selectedProdCatFilter);
+  });
 
   // Filter gallery items
   const filteredItems = gallery.filter(item => {
@@ -909,42 +1182,107 @@ export default function GalleryAdmin() {
             <LogOut size={12} /> CERRAR SESIÓN
           </button>
         </div>
-        <h1 className="pf-title text-4xl md:text-6xl font-black text-center mt-4">ADMINISTRADOR DE GALERÍA</h1>
+        <h1 className="pf-title text-4xl md:text-6xl font-black text-center mt-4">
+          {activeAdminScreen === 'productions' ? 'ADMINISTRADOR DE PRODUCCIONES' : 'ADMINISTRADOR DE GALERÍA'}
+        </h1>
         <p className="text-center italic text-neutral-500 mt-2 text-sm md:text-base">
-          Arrastra imágenes, reordena trabajos y administra las categorías en tiempo real.
+          {activeAdminScreen === 'productions'
+            ? 'Crea producciones, especializa sus categorías y administra sus fotos exclusivas en tiempo real.'
+            : 'Arrastra imágenes, reordena trabajos y administra las categorías en tiempo real.'}
         </p>
 
-        {/* Stats Section */}
-        <div className="max-w-4xl mx-auto mt-8 grid grid-cols-2 md:grid-cols-4 gap-4 px-4">
-          <div className="bg-[#0b0b0b] border border-neutral-900 p-4 rounded text-center">
-            <span className="block text-xs uppercase tracking-widest text-neutral-500 font-['Oswald']">TOTAL IMÁGENES</span>
-            <span className="text-2xl font-bold font-['Oswald'] text-white mt-1 block">{gallery.length}</span>
-          </div>
-          <div className="bg-[#0b0b0b] border border-neutral-900 p-4 rounded text-center">
-            <span className="block text-xs uppercase tracking-widest text-neutral-500 font-['Oswald']">CATEGORIZADAS</span>
-            <span className="text-2xl font-bold font-['Oswald'] text-red-800 mt-1 block">
-              {gallery.filter(i => i.categories && i.categories.length > 0).length}
-            </span>
-          </div>
-          <div className="bg-[#0b0b0b] border border-neutral-900 p-4 rounded text-center col-span-2 md:col-span-2">
-            <span className="block text-xs uppercase tracking-widest text-neutral-500 font-['Oswald']">CATEGORÍA PRINCIPAL</span>
-            <span className="text-sm font-bold font-['Oswald'] text-neutral-300 mt-2 block truncate">
-              {(() => {
-                const counts = {};
-                gallery.forEach(img => {
-                  (img.categories || []).forEach(c => {
-                    counts[c] = (counts[c] || 0) + 1;
+        {/* Dynamic Stats Section */}
+        {activeAdminScreen === 'gallery' ? (
+          <div className="max-w-4xl mx-auto mt-8 grid grid-cols-2 md:grid-cols-4 gap-4 px-4">
+            <div className="bg-[#0b0b0b] border border-neutral-900 p-4 rounded text-center">
+              <span className="block text-xs uppercase tracking-widest text-neutral-500 font-['Oswald']">TOTAL IMÁGENES</span>
+              <span className="text-2xl font-bold font-['Oswald'] text-white mt-1 block">{gallery.length}</span>
+            </div>
+            <div className="bg-[#0b0b0b] border border-neutral-900 p-4 rounded text-center">
+              <span className="block text-xs uppercase tracking-widest text-neutral-500 font-['Oswald']">CATEGORIZADAS</span>
+              <span className="text-2xl font-bold font-['Oswald'] text-red-800 mt-1 block">
+                {gallery.filter(i => i.categories && i.categories.length > 0).length}
+              </span>
+            </div>
+            <div className="bg-[#0b0b0b] border border-neutral-900 p-4 rounded text-center col-span-2 md:col-span-2">
+              <span className="block text-xs uppercase tracking-widest text-neutral-500 font-['Oswald']">CATEGORÍA PRINCIPAL</span>
+              <span className="text-sm font-bold font-['Oswald'] text-neutral-300 mt-2 block truncate">
+                {(() => {
+                  const counts = {};
+                  gallery.forEach(img => {
+                    (img.categories || []).forEach(c => {
+                      counts[c] = (counts[c] || 0) + 1;
+                    });
                   });
-                });
-                const sorted = Object.entries(counts).sort((a,b) => b[1] - a[1]);
-                return sorted.length > 0 ? `${CATEGORY_LABELS[sorted[0][0]]} (${sorted[0][1]})` : 'Ninguna';
-              })()}
-            </span>
+                  const sorted = Object.entries(counts).sort((a,b) => b[1] - a[1]);
+                  return sorted.length > 0 ? `${CATEGORY_LABELS[sorted[0][0]]} (${sorted[0][1]})` : 'Ninguna';
+                })()}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="max-w-4xl mx-auto mt-8 grid grid-cols-2 md:grid-cols-4 gap-4 px-4">
+            <div className="bg-[#0b0b0b] border border-neutral-900 p-4 rounded text-center">
+              <span className="block text-xs uppercase tracking-widest text-neutral-500 font-['Oswald']">PRODUCCIONES</span>
+              <span className="text-2xl font-bold font-['Oswald'] text-white mt-1 block">{productionsList.length}</span>
+            </div>
+            <div className="bg-[#0b0b0b] border border-neutral-900 p-4 rounded text-center">
+              <span className="block text-xs uppercase tracking-widest text-neutral-500 font-['Oswald']">PRODUCCIÓN ACTIVA</span>
+              <span className="text-sm font-bold font-['Oswald'] text-red-700 mt-2 block truncate" title={selectedProdName || 'Ninguna'}>
+                {selectedProdName || 'Ninguna'}
+              </span>
+            </div>
+            <div className="bg-[#0b0b0b] border border-neutral-900 p-4 rounded text-center">
+              <span className="block text-xs uppercase tracking-widest text-neutral-500 font-['Oswald']">FOTOS EN PRODUCCIÓN</span>
+              <span className="text-2xl font-bold font-['Oswald'] text-white mt-1 block">{activeProdImages.length}</span>
+            </div>
+            <div className="bg-[#0b0b0b] border border-neutral-900 p-4 rounded text-center">
+              <span className="block text-xs uppercase tracking-widest text-neutral-500 font-['Oswald']">CATEGORÍAS PROPIAS</span>
+              <span className="text-2xl font-bold font-['Oswald'] text-red-800 mt-1 block">{activeProdCategories.length}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Screen Switcher Tabs */}
+        <div className="max-w-4xl mx-auto mt-8 flex justify-center px-4">
+          <div className="bg-[#0b0b0b] border border-neutral-900 rounded-xl p-1.5 flex gap-2 w-full sm:w-auto shadow-2xl">
+            <button
+              type="button"
+              onClick={() => setActiveAdminScreen('gallery')}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2.5 px-6 py-3 rounded-lg font-['Oswald'] text-xs font-bold uppercase tracking-[0.2em] transition-all duration-300 cursor-pointer ${
+                activeAdminScreen === 'gallery'
+                  ? 'bg-red-950/80 border border-red-800 text-white shadow-glow'
+                  : 'text-neutral-500 hover:text-neutral-200 border border-transparent'
+              }`}
+            >
+              <LayoutGrid size={15} />
+              <span>Galería General</span>
+              <span className="ml-1 text-[10px] px-2 py-0.5 rounded-full bg-black/60 text-neutral-300 font-mono">
+                {gallery.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveAdminScreen('productions')}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2.5 px-6 py-3 rounded-lg font-['Oswald'] text-xs font-bold uppercase tracking-[0.2em] transition-all duration-300 cursor-pointer ${
+                activeAdminScreen === 'productions'
+                  ? 'bg-red-950/80 border border-red-800 text-white shadow-glow'
+                  : 'text-neutral-500 hover:text-neutral-200 border border-transparent'
+              }`}
+            >
+              <Film size={15} />
+              <span>Gestión de Producciones</span>
+              <span className="ml-1 text-[10px] px-2 py-0.5 rounded-full bg-black/60 text-neutral-300 font-mono">
+                {productionsList.length}
+              </span>
+            </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 mt-12 grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* ─── SCREEN 1: GALERÍA GENERAL ─── */}
+      {activeAdminScreen === 'gallery' ? (
+        <main className="max-w-7xl mx-auto px-6 mt-12 grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* Left Column: Upload Panel */}
         <section className="lg:col-span-1">
@@ -952,9 +1290,18 @@ export default function GalleryAdmin() {
             <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-red-950 to-transparent"></div>
             
             <div className="mb-8 border-b border-neutral-900 pb-8">
-              <h2 className="text-xl font-bold uppercase tracking-wider text-white mb-6 font-['Oswald'] flex items-center gap-2">
-                Gestión de Producciones
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold uppercase tracking-wider text-white font-['Oswald'] flex items-center gap-2">
+                  <Film size={18} className="text-red-700" /> Producciones
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setActiveAdminScreen('productions')}
+                  className="text-[10px] text-red-500 hover:text-red-400 font-['Oswald'] uppercase tracking-wider underline flex items-center gap-1"
+                >
+                  Abrir pantalla completa ➔
+                </button>
+              </div>
               <div className="flex gap-2 mb-4">
                 <input 
                   type="text" 
@@ -965,24 +1312,27 @@ export default function GalleryAdmin() {
                 />
                 <button 
                   type="button"
-                  onClick={handleAddProduction}
+                  onClick={() => handleCreateProduction(newProductionName)}
                   className="px-4 py-2 bg-red-950/20 border border-red-950 text-white text-xs font-bold uppercase tracking-wider font-['Oswald'] hover:bg-red-900 transition-colors"
                 >
                   Agregar
                 </button>
               </div>
               <div className="flex flex-wrap gap-2">
-                {productionsList.map(prod => (
-                  <div key={prod} className="flex items-center gap-1 bg-neutral-900/40 border border-neutral-800 rounded px-2 py-1 text-xs text-neutral-300">
-                    <span>{prod}</span>
-                    <button 
-                      onClick={() => handleDeleteProduction(prod)}
-                      className="text-neutral-500 hover:text-red-400"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
+                {productionsList.map(prod => {
+                  const pName = typeof prod === 'string' ? prod : prod.name;
+                  return (
+                    <div key={pName} className="flex items-center gap-1 bg-neutral-900/40 border border-neutral-800 rounded px-2 py-1 text-xs text-neutral-300">
+                      <span>{pName}</span>
+                      <button 
+                        onClick={() => handleDeleteProduction(pName)}
+                        className="text-neutral-500 hover:text-red-400"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -1280,19 +1630,20 @@ export default function GalleryAdmin() {
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {productionsList.map(prod => {
-                    const isSelected = uploadProductions.includes(prod);
+                    const pName = typeof prod === 'string' ? prod : prod.name;
+                    const isSelected = uploadProductions.includes(pName);
                     return (
                       <button
-                        key={prod}
+                        key={pName}
                         type="button"
-                        onClick={() => toggleUploadProduction(prod)}
+                        onClick={() => toggleUploadProduction(pName)}
                         className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 border rounded transition-all duration-300 font-['Oswald'] cursor-pointer ${
                           isSelected 
                             ? 'bg-red-950/40 border-red-800 text-white shadow-glow'
                             : 'bg-transparent border-neutral-900 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300'
                         }`}
                       >
-                        {prod}
+                        {pName}
                       </button>
                     );
                   })}
@@ -1477,20 +1828,21 @@ export default function GalleryAdmin() {
                           {productionsList.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1">
                               {productionsList.map(prod => {
-                                const isSelected = (item.productions || []).includes(prod);
+                                const pName = typeof prod === 'string' ? prod : prod.name;
+                                const isSelected = (item.productions || []).includes(pName);
                                 return (
                                   <button
-                                    key={prod}
+                                    key={pName}
                                     type="button"
-                                    onClick={() => toggleItemProduction(item, prod)}
-                                    title={`Alternar ${prod}`}
+                                    onClick={() => toggleItemProduction(item, pName)}
+                                    title={`Alternar ${pName}`}
                                     className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 border rounded transition-all duration-300 font-['Oswald'] cursor-pointer ${
                                       isSelected 
                                         ? 'bg-red-950/60 border-red-800 text-white'
                                         : 'bg-transparent border-neutral-900 text-neutral-600 hover:border-neutral-700 hover:text-neutral-400'
                                     }`}
                                   >
-                                    {prod}
+                                    {pName}
                                   </button>
                                 );
                               })}
@@ -1575,6 +1927,785 @@ export default function GalleryAdmin() {
         </section>
 
       </main>
+      ) : (
+        /* ─── SCREEN 2: GESTIÓN DE PRODUCCIONES ─── */
+        <main className="max-w-7xl mx-auto px-6 mt-10 grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column: Producciones, Categorías y Subida Directa */}
+          <section className="lg:col-span-1 space-y-6">
+            {/* 1. Selector y Creación de Producción */}
+            <div className="bg-[#090909] border border-neutral-900 p-6 rounded-lg shadow-xl relative overflow-hidden group hover:border-neutral-800 transition-all duration-300">
+              <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-red-950 to-transparent"></div>
+              
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-xl font-bold uppercase tracking-wider text-white font-['Oswald'] flex items-center gap-2">
+                  <Film size={18} className="text-red-700" /> Producciones ({productionsList.length})
+                </h2>
+              </div>
+              <p className="text-xs text-neutral-400 italic mb-4">
+                Selecciona una producción para gestionar sus fotos y categorías especializadas.
+              </p>
+
+              {/* Producciones list */}
+              <div className="space-y-2 mb-6 max-h-56 overflow-y-auto pr-1 custom-scrollbar">
+                {productionsList.length === 0 ? (
+                  <div className="p-4 border border-dashed border-neutral-900 rounded text-center text-xs text-neutral-500 italic">
+                    No hay producciones creadas aún. Crea la primera abajo.
+                  </div>
+                ) : (
+                  productionsList.map(prod => {
+                    const pName = typeof prod === 'string' ? prod : prod.name;
+                    const isSelected = selectedProdName === pName;
+                    const count = gallery.filter(i => (i.productions || []).includes(pName)).length;
+                    const catCount = Array.isArray(prod.categories) ? prod.categories.length : 0;
+
+                    return (
+                      <div
+                        key={pName}
+                        onClick={() => { setSelectedProdName(pName); setSelectedProdCatFilter('All'); }}
+                        className={`w-full text-left p-3 rounded border transition-all flex items-center justify-between cursor-pointer ${
+                          isSelected
+                            ? 'bg-red-950/40 border-red-800 text-white shadow-glow'
+                            : 'bg-[#0d0d0d] border-neutral-900 text-neutral-400 hover:border-neutral-800 hover:text-white'
+                        }`}
+                      >
+                        <div className="flex-1 truncate mr-2">
+                          <span className="font-['Oswald'] text-sm uppercase tracking-wide block truncate">
+                            {pName}
+                          </span>
+                          <span className="text-[10px] text-neutral-500 font-sans">
+                            {count} foto{count !== 1 ? 's' : ''} • {catCount} categoría{catCount !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => setEditingProdName({ oldName: pName, newName: pName })}
+                            title="Renombrar producción"
+                            className="p-1 hover:text-white text-neutral-500 transition-colors cursor-pointer"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteProduction(pName)}
+                            title="Eliminar producción"
+                            className="p-1 hover:text-red-400 text-neutral-500 transition-colors cursor-pointer"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Form to create production */}
+              <form onSubmit={handleCreateProduction} className="border-t border-neutral-900 pt-4">
+                <label className="block text-[11px] uppercase tracking-widest text-neutral-400 font-['Oswald'] mb-2">
+                  Crear Nueva Producción
+                </label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={newProdNameInput}
+                    onChange={(e) => setNewProdNameInput(e.target.value)}
+                    placeholder="ej. Bardo, Roma, Mal de Ojo..."
+                    className="flex-1 bg-[#0d0d0d] border border-neutral-900 focus:border-red-950 focus:outline-none p-2.5 text-xs text-white rounded font-sans transition-colors"
+                  />
+                  <button 
+                    type="submit"
+                    className="px-4 py-2.5 bg-red-950/30 border border-red-800 text-white text-xs font-bold uppercase tracking-wider font-['Oswald'] hover:bg-red-900 transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Plus size={14} /> Crear
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* 2. Categorías de la Producción Activa */}
+            {selectedProdName && (
+              <div className="bg-[#090909] border border-neutral-900 p-6 rounded-lg shadow-xl relative overflow-hidden group hover:border-neutral-800 transition-all duration-300">
+                <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-red-950 to-transparent"></div>
+                
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-lg font-bold uppercase tracking-wider text-white font-['Oswald'] flex items-center gap-2">
+                    <Tag size={16} className="text-red-700" /> Categorías de la Producción
+                  </h2>
+                  <span className="text-[10px] bg-red-950/60 border border-red-800/60 text-red-300 px-2 py-0.5 rounded font-['Oswald'] font-bold">
+                    {activeProdCategories.length}
+                  </span>
+                </div>
+                <p className="text-xs text-neutral-400 italic mb-4">
+                  Crea categorías especializadas para <strong className="text-white font-semibold not-italic font-['Oswald']">{selectedProdName}</strong> (ej. Personajes, Escenas, Envejecimiento, Prótesis).
+                </p>
+
+                {/* Form to add category */}
+                <form onSubmit={handleAddCategoryToActiveProd} className="flex gap-2 mb-4">
+                  <input 
+                    type="text" 
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    placeholder="Nueva categoría (ej. Personajes)..."
+                    className="flex-1 bg-[#0d0d0d] border border-neutral-900 focus:border-red-950 focus:outline-none p-2 text-xs text-white rounded font-sans transition-colors"
+                  />
+                  <button 
+                    type="submit"
+                    className="px-3 py-2 bg-red-950/20 border border-red-950 text-white text-xs font-bold uppercase tracking-wider font-['Oswald'] hover:bg-red-900 transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <Plus size={13} /> Agregar
+                  </button>
+                </form>
+
+                {/* List of custom categories */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] uppercase tracking-widest text-neutral-500 font-['Oswald'] block mb-2">
+                    Categorías de esta producción:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {activeProdCategories.length === 0 ? (
+                      <div className="text-xs text-neutral-600 italic py-2">
+                        No hay categorías personalizadas en esta producción. Agrega la primera arriba.
+                      </div>
+                    ) : (
+                      activeProdCategories.map(cat => {
+                        const count = activeProdImages.filter(i => (i.categories || []).includes(cat)).length;
+                        const isFiltered = selectedProdCatFilter === cat;
+
+                        return (
+                          <div 
+                            key={cat}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs border transition-colors ${
+                              isFiltered
+                                ? 'bg-red-900 border-red-700 text-white'
+                                : 'bg-neutral-900/60 border-neutral-800 text-neutral-300 hover:border-neutral-700'
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setSelectedProdCatFilter(isFiltered ? 'All' : cat)}
+                              className="font-['Oswald'] uppercase tracking-wider font-semibold text-[11px] text-left cursor-pointer"
+                              title={`Filtrar fotos por "${cat}"`}
+                            >
+                              {cat}
+                              <span className="ml-1 text-[9px] opacity-75 font-mono">({count})</span>
+                            </button>
+                            <button 
+                              type="button"
+                              onClick={() => handleDeleteCategoryFromActiveProd(cat)}
+                              title={`Eliminar categoría ${cat}`}
+                              className="text-neutral-500 hover:text-red-400 ml-1 cursor-pointer"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 3. Subida Directa a esta Producción */}
+            {selectedProdName && (
+              <div className="bg-[#090909] border border-neutral-900 p-6 rounded-lg shadow-xl relative overflow-hidden group hover:border-neutral-800 transition-all duration-300">
+                <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-red-950 to-transparent"></div>
+                
+                <h2 className="text-lg font-bold uppercase tracking-wider text-white mb-2 font-['Oswald'] flex items-center gap-2">
+                  <Upload size={16} className="text-red-700" /> Subir Fotos a esta Producción
+                </h2>
+                <p className="text-xs text-neutral-400 italic mb-5">
+                  Las fotos seleccionadas se asignarán automáticamente a <strong className="text-white font-semibold not-italic font-['Oswald']">{selectedProdName}</strong>.
+                </p>
+
+                <form onSubmit={handleProdUploadSubmit} className="space-y-5">
+                  {/* Dropzone */}
+                  <div 
+                    onClick={() => prodFileInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-lg p-5 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 bg-[#0d0d0d]/40 ${
+                      prodUploadPreviews.length > 0 ? 'border-red-900/60 bg-red-950/5' : 'border-neutral-800 hover:border-red-950 hover:bg-red-950/5'
+                    }`}
+                  >
+                    <input 
+                      type="file" 
+                      ref={prodFileInputRef}
+                      onChange={handleProdFileChange}
+                      accept="image/*"
+                      multiple
+                      className="hidden" 
+                    />
+
+                    {prodUploadPreviews.length > 0 ? (
+                      <div className="w-full space-y-3">
+                        <div className={`grid gap-2 w-full ${prodUploadPreviews.length === 1 ? 'grid-cols-1' : prodUploadPreviews.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                          {prodUploadPreviews.map((src, idx) => (
+                            <div key={idx} className="relative aspect-square rounded overflow-hidden bg-black flex items-center justify-center group/p">
+                              <img src={src} alt={`Preview ${idx + 1}`} className="max-h-full max-w-full object-cover w-full h-full" />
+                              <button 
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setProdUploadFiles(prev => prev.filter((_, i) => i !== idx));
+                                  setProdUploadPreviews(prev => prev.filter((_, i) => i !== idx));
+                                  if (prodFileInputRef.current) prodFileInputRef.current.value = '';
+                                }}
+                                className="absolute top-1 right-1 bg-black/80 hover:bg-red-900 border border-neutral-800 p-1 rounded-full text-white transition-colors opacity-0 group-hover/p:opacity-100"
+                              >
+                                <X size={12} />
+                              </button>
+                              <div className="absolute bottom-1 left-1 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded font-['Oswald']">
+                                {idx + 1}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-neutral-400 font-['Oswald'] uppercase tracking-wider">
+                            {prodUploadPreviews.length} seleccionada{prodUploadPreviews.length > 1 ? 's' : ''}
+                          </p>
+                          <span className="text-xs text-red-700 hover:text-red-500 font-['Oswald'] uppercase tracking-wider">
+                            + Agregar más
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-4">
+                        <Upload size={28} className="mx-auto text-neutral-600 mb-2 group-hover:text-red-800 transition-colors" />
+                        <p className="text-xs font-semibold text-neutral-300 uppercase font-['Oswald'] tracking-wider">Seleccionar Imágenes</p>
+                        <p className="text-[11px] text-neutral-500 mt-1">Puedes elegir varias fotos a la vez</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {prodUploadPreviews.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProdUploadFiles([]);
+                        setProdUploadPreviews([]);
+                        setProdUploadCaption('');
+                        if (prodFileInputRef.current) prodFileInputRef.current.value = '';
+                      }}
+                      className="w-full text-xs text-neutral-500 hover:text-red-500 font-['Oswald'] uppercase tracking-wider py-0.5 transition-colors cursor-pointer"
+                    >
+                      Quitar todas las imágenes seleccionadas
+                    </button>
+                  )}
+
+                  {/* Caption */}
+                  <div>
+                    <label className="block text-[11px] uppercase tracking-widest text-neutral-400 font-['Oswald'] mb-1.5">
+                      Leyenda / Título
+                    </label>
+                    <input 
+                      type="text" 
+                      value={prodUploadCaption}
+                      onChange={(e) => setProdUploadCaption(e.target.value)}
+                      placeholder="ej. Caracterización prótesis personaje..."
+                      className="w-full bg-[#0d0d0d] border border-neutral-900 hover:border-neutral-800 focus:border-red-950 focus:outline-none p-2.5 text-xs text-white rounded font-sans transition-colors"
+                    />
+                  </div>
+
+                  {/* Categorías a asignar */}
+                  <div className="space-y-3">
+                    {activeProdCategories.length > 0 && (
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-widest text-neutral-500 font-['Oswald'] mb-2">
+                          Categorías de {selectedProdName}:
+                        </label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {activeProdCategories.map(cat => {
+                            const isSelected = prodUploadCategories.includes(cat);
+                            return (
+                              <button
+                                key={cat}
+                                type="button"
+                                onClick={() => toggleProdUploadCategory(cat)}
+                                className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border rounded transition-all font-['Oswald'] cursor-pointer ${
+                                  isSelected 
+                                    ? 'bg-red-950 border-red-700 text-white shadow-glow'
+                                    : 'bg-transparent border-neutral-900 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300'
+                                }`}
+                              >
+                                {cat}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest text-neutral-500 font-['Oswald'] mb-2">
+                        Categorías Generales:
+                      </label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {CATEGORIES.map(cat => {
+                          const isSelected = prodUploadCategories.includes(cat);
+                          return (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => toggleProdUploadCategory(cat)}
+                              className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 border rounded transition-all font-['Oswald'] cursor-pointer ${
+                                isSelected 
+                                  ? 'bg-red-950 border-red-700 text-white shadow-glow'
+                                  : 'bg-transparent border-neutral-900 text-neutral-600 hover:border-neutral-700 hover:text-neutral-400'
+                              }`}
+                            >
+                              {CATEGORY_LABELS[cat]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Submit */}
+                  <button
+                    type="submit"
+                    disabled={isProdUploading || prodUploadFiles.length === 0}
+                    className={`w-full py-3 px-4 border rounded font-['Oswald'] text-xs font-bold uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${
+                      isProdUploading || prodUploadFiles.length === 0
+                        ? 'border-neutral-900 bg-neutral-900/20 text-neutral-600 cursor-not-allowed'
+                        : 'border-red-800 bg-red-950/40 text-white hover:bg-red-900 cursor-pointer shadow-lg hover:shadow-red-900/20'
+                    }`}
+                  >
+                    {isProdUploading ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin text-white" /> SUBIENDO A PRODUCCIÓN...
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={14} /> SUBIR {prodUploadFiles.length > 0 ? `(${prodUploadFiles.length}) ` : ''}FOTO{prodUploadFiles.length !== 1 ? 'S' : ''} A "{selectedProdName.toUpperCase()}"
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
+            )}
+          </section>
+
+          {/* Right Column: Gestión de Fotos de la Producción */}
+          <section className="lg:col-span-2 space-y-6">
+            <div className="bg-[#090909] border border-neutral-900 p-6 rounded-lg shadow-xl relative">
+              <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-red-950 to-transparent"></div>
+
+              {/* Header of Active Production */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-900 pb-6 mb-6">
+                <div>
+                  <span className="text-[10px] font-['Oswald'] uppercase tracking-[0.25em] text-red-700 font-bold block mb-1">
+                    Producción Activa
+                  </span>
+                  <h2 className="text-2xl md:text-3xl font-black uppercase tracking-wide text-white font-['Oswald']">
+                    {selectedProdName || 'Selecciona una producción'}
+                  </h2>
+                  <p className="text-xs text-neutral-500 font-sans mt-1">
+                    {activeProdImages.length} trabajo{activeProdImages.length !== 1 ? 's' : ''} asignado{activeProdImages.length !== 1 ? 's' : ''}
+                    {activeProdCategories.length > 0 && ` • ${activeProdCategories.length} categoría(s) propia(s)`}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  {selectedProdName && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAssignModal(true)}
+                      className="px-4 py-2 border border-red-950 bg-red-950/30 hover:bg-red-900 text-white text-xs font-bold uppercase tracking-wider font-['Oswald'] rounded transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Link2 size={13} /> Vincular Fotos Existentes
+                    </button>
+                  )}
+
+                  {/* Search within this production */}
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-500" />
+                    <input 
+                      type="text"
+                      value={searchProdQuery}
+                      onChange={(e) => setSearchProdQuery(e.target.value)}
+                      placeholder="Buscar en esta producción..."
+                      className="bg-[#0d0d0d] border border-neutral-900 hover:border-neutral-800 focus:border-red-950 focus:outline-none pl-9 pr-4 py-2 text-xs text-white rounded font-sans w-full sm:w-56 transition-colors"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Category Filters for this production */}
+              {selectedProdName && (
+                <div className="flex items-center gap-2 flex-wrap pb-4 mb-4 border-b border-neutral-900/60">
+                  <span className="text-[10px] uppercase font-['Oswald'] text-neutral-500 tracking-widest mr-1">
+                    Filtrar por categoría:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedProdCatFilter('All')}
+                    className={`text-[10px] font-['Oswald'] font-bold uppercase tracking-wider px-3 py-1 rounded transition-colors cursor-pointer ${
+                      selectedProdCatFilter === 'All'
+                        ? 'bg-red-950 border border-red-800 text-white'
+                        : 'text-neutral-500 hover:text-white border border-neutral-900 bg-[#0d0d0d]'
+                    }`}
+                  >
+                    TODAS ({activeProdImages.length})
+                  </button>
+                  {activeProdCategories.map(cat => {
+                    const count = activeProdImages.filter(i => (i.categories || []).includes(cat)).length;
+                    return (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setSelectedProdCatFilter(cat)}
+                        className={`text-[10px] font-['Oswald'] font-bold uppercase tracking-wider px-3 py-1 rounded transition-colors cursor-pointer ${
+                          selectedProdCatFilter === cat
+                            ? 'bg-red-950 border border-red-800 text-white'
+                            : 'text-neutral-400 hover:text-white border border-neutral-900 bg-[#0d0d0d]'
+                        }`}
+                      >
+                        {cat.toUpperCase()} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* List Header */}
+              <div className="text-xs uppercase tracking-widest text-neutral-500 font-['Oswald'] flex items-center px-4 py-2 border-b border-neutral-900 bg-neutral-950/20 mb-2">
+                <div className="w-12 text-center">Orden</div>
+                <div className="w-16 ml-4">Miniatura</div>
+                <div className="flex-grow ml-6">Detalles y Categorías</div>
+                <div className="w-32 text-right">Acciones</div>
+              </div>
+
+              {/* Photos List */}
+              <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                {filteredProdImages.length === 0 ? (
+                  <div className="py-16 text-center text-neutral-500 italic space-y-3">
+                    <Film size={36} className="mx-auto text-neutral-700 opacity-60" />
+                    <p className="text-sm">
+                      {!selectedProdName 
+                        ? 'Selecciona una producción en la columna izquierda.' 
+                        : activeProdImages.length === 0 
+                          ? 'Esta producción aún no tiene fotos asignadas.' 
+                          : 'No hay fotos con el filtro o búsqueda seleccionada.'}
+                    </p>
+                    {selectedProdName && activeProdImages.length === 0 && (
+                      <p className="text-xs text-neutral-600">
+                        Sube fotos en el panel izquierdo o haz clic en "+ Vincular Fotos Existentes" para agregar fotos ya presentes en la galería.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  filteredProdImages.map((item, idx) => {
+                    const fullIndex = gallery.findIndex(g => g.filename === item.filename);
+
+                    return (
+                      <article
+                        key={`${item.filename}-${idx}`}
+                        className={`bg-[#0b0b0b] hover:bg-[#0e0e0e] border border-neutral-950 hover:border-neutral-900/60 p-4 rounded flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all duration-300 ${
+                          item.hidden ? 'opacity-40 border-dashed border-red-950/40 bg-black/40' : ''
+                        }`}
+                      >
+                        {/* Order Input */}
+                        <div className="flex items-center gap-1 w-full sm:w-auto">
+                          <span className="text-xs font-['Oswald'] text-neutral-500 uppercase mr-2 sm:hidden">Orden:</span>
+                          <input 
+                            type="number"
+                            value={fullIndex + 1}
+                            onChange={(e) => handleOrderChange(item, e.target.value)}
+                            className="w-12 bg-black border border-neutral-900 text-center py-1.5 text-xs text-white rounded font-sans focus:outline-none focus:border-red-950 font-bold"
+                            min="1"
+                            max={gallery.length}
+                          />
+                        </div>
+
+                        {/* Thumbnail */}
+                        <div className="w-16 h-16 rounded overflow-hidden bg-black flex-shrink-0 border border-neutral-900 relative group/thumb">
+                          <img 
+                            src={item.src_url} 
+                            alt="Thumb" 
+                            className="w-full h-full object-cover group-hover/thumb:scale-110 transition-transform duration-500" 
+                            onError={(e) => {
+                              e.target.src = `/imagenes web/imagenes/${item.filename}`;
+                            }}
+                          />
+                          {item.is_video && (
+                            <div className="absolute inset-0 bg-red-950/40 flex items-center justify-center">
+                              <Play size={16} fill="white" className="text-white" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Details & Categories */}
+                        <div className="flex-grow space-y-2 w-full sm:w-auto">
+                          <input 
+                            type="text"
+                            value={item.hover_caption || ''}
+                            onChange={(e) => handleCaptionChange(item, e.target.value)}
+                            className="w-full bg-transparent border-b border-transparent hover:border-neutral-800 focus:border-red-950 focus:outline-none pb-0.5 text-sm font-semibold text-white tracking-wide font-sans transition-colors"
+                            placeholder="Sin leyenda..."
+                          />
+
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] text-neutral-600 font-mono select-all truncate block max-w-xs">{item.filename}</span>
+                            {item.hidden && (
+                              <span className="text-[8px] bg-red-950/60 border border-red-900/60 text-red-400 px-1.5 py-0.5 rounded font-['Oswald'] uppercase tracking-wider font-bold leading-none">
+                                Oculto en Web
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Interactive Categories on this photo */}
+                          <div className="space-y-1 mt-1">
+                            {/* Production categories */}
+                            {activeProdCategories.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {activeProdCategories.map(cat => {
+                                  const isSelected = (item.categories || []).includes(cat);
+                                  return (
+                                    <button
+                                      key={cat}
+                                      type="button"
+                                      onClick={() => toggleItemCategory(item, cat)}
+                                      title={`Alternar categoría "${cat}" en esta foto`}
+                                      className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 border rounded transition-all font-['Oswald'] cursor-pointer ${
+                                        isSelected 
+                                          ? 'bg-red-900 border-red-700 text-white'
+                                          : 'bg-neutral-900/30 border-neutral-900 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300'
+                                      }`}
+                                    >
+                                      {cat}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {/* Global categories */}
+                            <div className="flex flex-wrap gap-1">
+                              {CATEGORIES.map(cat => {
+                                const isSelected = (item.categories || []).includes(cat);
+                                return (
+                                  <button
+                                    key={cat}
+                                    type="button"
+                                    onClick={() => toggleItemCategory(item, cat)}
+                                    title={`Alternar ${CATEGORY_LABELS[cat]}`}
+                                    className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 border rounded transition-all font-['Oswald'] cursor-pointer ${
+                                      isSelected 
+                                        ? 'bg-red-950/60 border-red-800 text-white'
+                                        : 'bg-transparent border-neutral-900 text-neutral-600 hover:border-neutral-700 hover:text-neutral-400'
+                                    }`}
+                                  >
+                                    {CATEGORY_LABELS[cat]}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Actions & Ordering */}
+                        <div className="flex items-center gap-1 self-end sm:self-center">
+                          {/* Order buttons */}
+                          <div className="flex flex-col">
+                            <button 
+                              onClick={() => handleMoveItem(fullIndex, -1)}
+                              disabled={fullIndex === 0}
+                              title="Mover arriba"
+                              className="p-1 rounded hover:bg-neutral-800 text-neutral-500 hover:text-white disabled:opacity-20 cursor-pointer"
+                            >
+                              <ChevronUp size={14} />
+                            </button>
+                            <button 
+                              onClick={() => handleMoveItem(fullIndex, 1)}
+                              disabled={fullIndex === gallery.length - 1}
+                              title="Mover abajo"
+                              className="p-1 rounded hover:bg-neutral-800 text-neutral-500 hover:text-white disabled:opacity-20 cursor-pointer"
+                            >
+                              <ChevronDown size={14} />
+                            </button>
+                          </div>
+
+                          {/* Visibility */}
+                          <button 
+                            onClick={() => handleToggleVisibility(item)}
+                            title={item.hidden ? "Mostrar en la web" : "Ocultar en la web"}
+                            className={`p-1.5 rounded border border-neutral-900 transition-colors ml-1 cursor-pointer ${
+                              item.hidden 
+                                ? 'bg-red-950/20 text-red-500 hover:bg-red-900/30' 
+                                : 'bg-[#0d0d0d] text-neutral-500 hover:bg-neutral-800 hover:text-white'
+                            }`}
+                          >
+                            {item.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                          </button>
+
+                          {/* Replace image */}
+                          <button 
+                            onClick={() => handleEditImageClick(item)}
+                            title="Reemplazar Imagen/Miniatura"
+                            className="p-1.5 rounded border border-neutral-900 bg-[#0d0d0d] text-neutral-500 hover:bg-neutral-800 hover:text-white transition-colors ml-1 cursor-pointer"
+                          >
+                            <ImagePlus size={14} />
+                          </button>
+
+                          {/* Unassign from this production */}
+                          <button 
+                            onClick={() => toggleImageProductionAssignment(item, selectedProdName)}
+                            title={`Desvincular de "${selectedProdName}"`}
+                            className="p-1.5 rounded border border-neutral-900 bg-[#0d0d0d] text-neutral-500 hover:bg-yellow-950/30 hover:text-yellow-400 hover:border-yellow-900 transition-colors ml-1 cursor-pointer"
+                          >
+                            <Unlink size={14} />
+                          </button>
+
+                          {/* Delete permanently */}
+                          <button 
+                            onClick={() => handleDeleteImage(item)}
+                            title="Eliminar definitivamente de la galería"
+                            className="p-1.5 rounded border border-neutral-900 bg-[#0d0d0d] text-neutral-500 hover:bg-red-950 hover:text-red-400 hover:border-red-900 transition-colors ml-1 cursor-pointer"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </section>
+        </main>
+      )}
+
+      {/* Modal to link existing gallery photos to current production */}
+      {showAssignModal && (
+        <div className="fixed inset-0 z-[1200] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-fadeIn">
+          <div className="max-w-4xl w-full bg-[#0a0a0a] border border-neutral-800 rounded-xl p-6 shadow-2xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-4 border-b border-neutral-900">
+              <div>
+                <span className="text-[10px] font-['Oswald'] uppercase tracking-widest text-red-700 font-bold block">
+                  Vincular fotos a producción
+                </span>
+                <h3 className="text-xl font-bold uppercase font-['Oswald'] text-white">
+                  {selectedProdName}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAssignModal(false)}
+                className="p-2 text-neutral-500 hover:text-white hover:bg-neutral-900 rounded-full transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="py-4">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-500" />
+                <input 
+                  type="text"
+                  value={assignSearch}
+                  onChange={(e) => setAssignSearch(e.target.value)}
+                  placeholder="Buscar por leyenda o nombre de archivo..."
+                  className="w-full bg-[#0d0d0d] border border-neutral-900 hover:border-neutral-800 focus:border-red-950 focus:outline-none pl-9 pr-4 py-2.5 text-xs text-white rounded font-sans transition-colors"
+                />
+              </div>
+              <p className="text-[11px] text-neutral-500 italic mt-2">
+                Haz clic sobre una foto para vincularla o desvincularla de <strong className="text-neutral-300 not-italic font-semibold">{selectedProdName}</strong>.
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 custom-scrollbar py-2">
+              {gallery
+                .filter(item => {
+                  if (!assignSearch.trim()) return true;
+                  const q = assignSearch.toLowerCase();
+                  return (item.hover_caption || '').toLowerCase().includes(q) || (item.filename || '').toLowerCase().includes(q);
+                })
+                .map(item => {
+                  const isAssigned = (item.productions || []).includes(selectedProdName);
+                  return (
+                    <div
+                      key={item.filename}
+                      onClick={() => toggleImageProductionAssignment(item, selectedProdName)}
+                      className={`relative aspect-square rounded overflow-hidden border cursor-pointer transition-all duration-200 group ${
+                        isAssigned
+                          ? 'border-red-600 ring-2 ring-red-800/80'
+                          : 'border-neutral-900 hover:border-neutral-700 opacity-60 hover:opacity-100'
+                      }`}
+                    >
+                      <img 
+                        src={item.src_url} 
+                        alt={item.hover_caption} 
+                        className="w-full h-full object-cover" 
+                        onError={(e) => { e.target.src = `/imagenes web/imagenes/${item.filename}`; }}
+                      />
+                      {isAssigned && (
+                        <div className="absolute top-1.5 right-1.5 bg-red-700 text-white p-1 rounded-full shadow">
+                          <Check size={12} />
+                        </div>
+                      )}
+                      <div className="absolute inset-x-0 bottom-0 bg-black/85 p-1 text-[9px] text-white truncate font-sans">
+                        {item.hover_caption || item.filename}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            <div className="pt-4 border-t border-neutral-900 flex justify-between items-center">
+              <span className="text-xs text-neutral-400 font-['Oswald'] uppercase tracking-wider">
+                {gallery.filter(i => (i.productions || []).includes(selectedProdName)).length} fotos vinculadas en total
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowAssignModal(false)}
+                className="px-6 py-2 bg-red-950/60 border border-red-800 text-white font-['Oswald'] text-xs font-bold uppercase tracking-wider rounded hover:bg-red-900 transition-all cursor-pointer"
+              >
+                Listo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal to rename production */}
+      {editingProdName && (
+        <div className="fixed inset-0 z-[1200] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="max-w-md w-full bg-[#0a0a0a] border border-neutral-800 rounded-xl p-6 shadow-2xl">
+            <h3 className="text-lg font-bold uppercase font-['Oswald'] text-white mb-2">
+              Renombrar Producción
+            </h3>
+            <p className="text-xs text-neutral-400 italic mb-4">
+              Cambiar el nombre actualizará automáticamente todas las fotos asignadas a esta producción.
+            </p>
+            <input 
+              type="text" 
+              value={editingProdName.newName}
+              onChange={(e) => setEditingProdName(prev => ({ ...prev, newName: e.target.value }))}
+              className="w-full bg-[#0d0d0d] border border-neutral-800 focus:border-red-950 focus:outline-none p-3 text-sm text-white rounded font-sans mb-4"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingProdName(null)}
+                className="px-4 py-2 border border-neutral-800 hover:bg-neutral-900 text-neutral-400 text-xs font-bold uppercase tracking-wider font-['Oswald'] rounded transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRenameProduction(editingProdName.oldName, editingProdName.newName)}
+                className="px-5 py-2 bg-red-950/60 border border-red-800 hover:bg-red-900 text-white text-xs font-bold uppercase tracking-wider font-['Oswald'] rounded transition-colors cursor-pointer"
+              >
+                Guardar Nombre
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating Bottom Save Bar */}
       <footer className="fixed bottom-0 left-0 w-full z-[1000] bg-[#090909]/95 border-t border-red-950/30 backdrop-blur-md py-4 px-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xl">
