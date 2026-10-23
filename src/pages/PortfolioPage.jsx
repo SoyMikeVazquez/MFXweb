@@ -34,30 +34,48 @@ const CATEGORY_LABELS = {
 };
 
 /* ─── Prepare & filter images ─────────────────────────────────────────────── */
-function prepareImages(images, category, filterMode = 'category', subCategory = 'All') {
-  return images
-    .filter((img) => {
-      if (img.hidden === true) return false;
-      if (!img.src_url || !img.hover_caption) return false;
-      
-      if (category === 'Videos' && filterMode === 'category') {
-        return img.is_video === true;
-      }
-      
-      if (category === 'All') {
-        if (filterMode === 'production') {
-          return img.productions?.length > 0;
-        }
-        return img.categories?.length > 0 || img.is_video === true;
-      }
-      
-      if (filterMode === 'production') {
-        const inProd = img.productions?.includes(category);
-        if (!inProd) return false;
+function prepareImages(portfolioImages, productionsList, category, filterMode = 'category', subCategory = 'All') {
+  if (filterMode === 'production') {
+    let prodImages = [];
+    if (category === 'All') {
+      prodImages = (productionsList || []).flatMap((p) => {
+        const pName = typeof p === 'string' ? p : p?.name || '';
+        const list = Array.isArray(p?.images) ? p.images : [];
+        return list.map((img) => ({ ...img, productionName: pName }));
+      });
+    } else {
+      const activeP = (productionsList || []).find((p) => (typeof p === 'string' ? p : p?.name) === category);
+      prodImages = (activeP?.images || []).map((img) => ({ ...img, productionName: category }));
+    }
+
+    return prodImages
+      .filter((img) => {
+        if (img.hidden === true) return false;
+        if (!img.src_url || !img.hover_caption) return false;
         if (subCategory && subCategory !== 'All') {
           return img.categories?.includes(subCategory);
         }
         return true;
+      })
+      .sort((a, b) => {
+        if (a.order == null) return 1;
+        if (b.order == null) return -1;
+        return a.order - b.order;
+      });
+  }
+
+  // General Portfolio
+  return portfolioImages
+    .filter((img) => {
+      if (img.hidden === true) return false;
+      if (!img.src_url || !img.hover_caption) return false;
+      
+      if (category === 'Videos') {
+        return img.is_video === true;
+      }
+      
+      if (category === 'All') {
+        return img.categories?.length > 0 || img.is_video === true;
       }
 
       return img.categories?.includes(category);
@@ -406,14 +424,27 @@ export default function PortfolioPage() {
 
   const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
+  const [prodsData, setProdsData] = useState(() => {
+    return Array.isArray(productionsData) ? productionsData : [];
+  });
+
+  useEffect(() => {
+    fetch('/imagenes web/imagenes/productions.json?t=' + Date.now())
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (Array.isArray(data)) setProdsData(data);
+      })
+      .catch(() => {});
+  }, []);
+
   const currentProdObj = useMemo(() => {
     if (filterMode !== 'production' || displayCategory === 'All') return null;
-    return productionsData.find(p => (typeof p === 'string' ? p : p?.name) === displayCategory) || null;
-  }, [filterMode, displayCategory]);
+    return prodsData.find((p) => (typeof p === 'string' ? p : p?.name) === displayCategory) || null;
+  }, [filterMode, displayCategory, prodsData]);
 
   const filtered = useMemo(
-    () => prepareImages(imagesData, displayCategory, filterMode, subCategory),
-    [displayCategory, filterMode, subCategory]
+    () => prepareImages(imagesData, prodsData, displayCategory, filterMode, subCategory),
+    [displayCategory, filterMode, subCategory, prodsData]
   );
 
   // Fetch views on mount
@@ -538,7 +569,7 @@ export default function PortfolioPage() {
               >
                 TODAS
               </button>
-              {productionsData.map((prod) => {
+              {prodsData.map((prod) => {
                 const prodName = typeof prod === 'string' ? prod : prod?.name || '';
                 return (
                   <button
@@ -591,16 +622,22 @@ export default function PortfolioPage() {
       <main className={`pf-grid-wrap ${transitioning ? 'pf-grid-wrap--fade' : ''}`}>
         <div className="pf-count">{filtered.length} trabajos</div>
         <div className={`pf-grid ${displayCategory === 'Videos' ? 'pf-grid--videos' : ''}`}>
-          {filtered.map((img, idx) => (
-            <GalleryItem
-              key={`${displayCategory}-${subCategory}-${img.filename}-${img.order ?? idx}`}
-              img={img}
-              index={idx}
-              onClick={openLb}
-              isRectangular={displayCategory === 'Videos'}
-              views={views}
-            />
-          ))}
+          {filtered.length === 0 ? (
+            <div className="col-span-full py-24 text-center text-neutral-500 font-['Oswald'] uppercase tracking-widest text-sm">
+              No hay imágenes disponibles en esta selección
+            </div>
+          ) : (
+            filtered.map((img, idx) => (
+              <GalleryItem
+                key={`${displayCategory}-${subCategory}-${img.filename}-${img.order ?? idx}`}
+                img={img}
+                index={idx}
+                onClick={openLb}
+                isRectangular={displayCategory === 'Videos'}
+                views={views}
+              />
+            ))
+          )}
         </div>
       </main>
 

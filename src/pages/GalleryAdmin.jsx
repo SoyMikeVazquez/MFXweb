@@ -54,17 +54,18 @@ const CATEGORY_LABELS = {
   'Costumes Masks': 'COSTUMES & MASKS',
 };
 
-// Normalize productions to object form { name: string, categories: string[], description?: string }
+// Normalize productions to object form { name: string, categories: string[], description?: string, images?: any[] }
 const normalizeProductions = (list) => {
   if (!Array.isArray(list)) return [];
   return list.map(item => {
     if (typeof item === 'string') {
-      return { name: item, categories: [], description: '' };
+      return { name: item, categories: [], description: '', images: [] };
     }
     return {
       name: item.name || '',
       categories: Array.isArray(item.categories) ? item.categories : [],
-      description: item.description || ''
+      description: item.description || '',
+      images: Array.isArray(item.images) ? item.images : []
     };
   }).filter(p => p.name.trim().length > 0);
 };
@@ -73,6 +74,23 @@ export default function GalleryAdmin() {
   const [gallery, setGallery] = useState([]);
   const [productionsList, setProductionsList] = useState(() => normalizeProductions(initialProductionsData));
   const [activeAdminScreen, setActiveAdminScreen] = useState('gallery'); // 'gallery' | 'productions'
+
+  // Fetch productions dynamically on mount
+  useEffect(() => {
+    fetch('/imagenes web/imagenes/productions.json?t=' + Date.now())
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (Array.isArray(data)) {
+          const norm = normalizeProductions(data);
+          setProductionsList(norm);
+          setSelectedProdName(prev => {
+            if (norm.some(p => p.name === prev)) return prev;
+            return norm[0]?.name || '';
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Productions screen specific states
   const [selectedProdName, setSelectedProdName] = useState(() => {
@@ -84,8 +102,6 @@ export default function GalleryAdmin() {
   const [searchProdQuery, setSearchProdQuery] = useState('');
   const [selectedProdCatFilter, setSelectedProdCatFilter] = useState('All');
   const [editingProdName, setEditingProdName] = useState(null); // { oldName, newName }
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const [assignSearch, setAssignSearch] = useState('');
 
   // Production batch upload form states
   const [prodUploadFiles, setProdUploadFiles] = useState([]);
@@ -128,7 +144,6 @@ export default function GalleryAdmin() {
   const [uploadFiles, setUploadFiles] = useState([]); // array of File objects
   const [uploadCaption, setUploadCaption] = useState('');
   const [uploadCategories, setUploadCategories] = useState([]);
-  const [uploadProductions, setUploadProductions] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -415,8 +430,7 @@ export default function GalleryAdmin() {
               filename: file.name,
               base64Data,
               hover_caption: uploadCaption,
-              categories: uploadCategories,
-              productions: uploadProductions
+              categories: uploadCategories
             };
 
             const url = isLocal ? '/api/upload' : '/api.php?action=upload';
@@ -460,7 +474,6 @@ export default function GalleryAdmin() {
         setUploadPreviews([]);
         setUploadCaption('');
         setUploadCategories([]);
-        setUploadProductions([]);
         if (fileInputRef.current) fileInputRef.current.value = '';
         
         if (errorCount > 0) {
@@ -516,7 +529,6 @@ export default function GalleryAdmin() {
           filename: uploadedThumbData.filename,
           hover_caption: uploadCaption,
           categories: uploadCategories,
-          productions: uploadProductions,
           is_video: true,
           video_url: finalVideoUrl,
           video_type: videoTypeVal,
@@ -534,7 +546,6 @@ export default function GalleryAdmin() {
         setVideoThumbnailPreview('');
         setUploadCaption('');
         setUploadCategories([]);
-        setUploadProductions([]);
         if (videoFileInputRef.current) videoFileInputRef.current.value = '';
         if (thumbnailInputRef.current) thumbnailInputRef.current.value = '';
 
@@ -774,21 +785,6 @@ export default function GalleryAdmin() {
     setGallery(updated);
   };
 
-  const toggleItemProduction = (item, prod) => {
-    const updated = gallery.map(i => {
-      if (i.filename === item.filename) {
-        const prods = i.productions || [];
-        const newProds = prods.includes(prod)
-          ? prods.filter(p => p !== prod)
-          : [...prods, prod];
-        return { ...i, productions: newProds };
-      }
-      return i;
-    });
-    setGallery(updated);
-    setHasChanges(true);
-  };
-
   // Save productions list helper (stores normalized objects array)
   const saveProductionsList = async (newList) => {
     const url = isLocal ? '/api/productions' : '/api.php?action=productions';
@@ -806,7 +802,6 @@ export default function GalleryAdmin() {
       });
       if (!response.ok) throw new Error('Error al guardar producciones');
       setProductionsList(newList);
-      setNewProductionName('');
       setNewProdNameInput('');
       showToast('Producciones actualizadas con éxito.');
     } catch (err) {
@@ -815,9 +810,10 @@ export default function GalleryAdmin() {
     }
   };
 
-  // Add production (from original box or new screen)
-  const handleCreateProduction = async (nameToCreate) => {
-    const pName = (nameToCreate || newProdNameInput || newProductionName).trim();
+  // Create new production
+  const handleCreateProduction = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const pName = newProdNameInput.trim();
     if (!pName) {
       showToast('Ingresa un nombre para la producción.', 'error');
       return;
@@ -827,34 +823,20 @@ export default function GalleryAdmin() {
       return;
     }
     
-    const newProd = { name: pName, categories: [], description: '' };
+    const newProd = { name: pName, categories: [], description: '', images: [] };
     const newList = [...productionsList, newProd];
     await saveProductionsList(newList);
     setSelectedProdName(pName);
     setNewProdNameInput('');
-    setNewProductionName('');
   };
-
-  const handleAddProduction = handleCreateProduction;
 
   // Delete production
   const handleDeleteProduction = async (prodName) => {
-    if (!window.confirm(`¿Seguro que deseas eliminar la producción "${prodName}"?\nLas fotos se mantendrán en la galería pero se les removerá la asignación de esta producción.`)) {
+    if (!window.confirm(`¿Seguro que deseas eliminar la producción "${prodName}" y todas sus fotos?`)) {
       return;
     }
     const newList = productionsList.filter(p => p.name !== prodName);
     await saveProductionsList(newList);
-    // Remove from gallery items
-    setGallery(prev => prev.map(item => {
-      if ((item.productions || []).includes(prodName)) {
-        return {
-          ...item,
-          productions: item.productions.filter(p => p !== prodName)
-        };
-      }
-      return item;
-    }));
-    setHasChanges(true);
     if (selectedProdName === prodName) {
       setSelectedProdName(newList[0]?.name || '');
     }
@@ -874,16 +856,6 @@ export default function GalleryAdmin() {
     }
     const newList = productionsList.map(p => p.name === oldName ? { ...p, name: clean } : p);
     await saveProductionsList(newList);
-    setGallery(prev => prev.map(item => {
-      if ((item.productions || []).includes(oldName)) {
-        return {
-          ...item,
-          productions: item.productions.map(p => p === oldName ? clean : p)
-        };
-      }
-      return item;
-    }));
-    setHasChanges(true);
     if (selectedProdName === oldName) {
       setSelectedProdName(clean);
     }
@@ -917,8 +889,12 @@ export default function GalleryAdmin() {
     if (!window.confirm(`¿Eliminar la categoría "${catName}" de ${selectedProdName}?`)) return;
     const currentProd = productionsList.find(p => p.name === selectedProdName);
     if (!currentProd) return;
-    const updated = currentProd.categories.filter(c => c !== catName);
-    const newList = productionsList.map(p => p.name === selectedProdName ? { ...p, categories: updated } : p);
+    const updatedCats = currentProd.categories.filter(c => c !== catName);
+    const updatedImages = (currentProd.images || []).map(img => ({
+      ...img,
+      categories: (img.categories || []).filter(c => c !== catName)
+    }));
+    const newList = productionsList.map(p => p.name === selectedProdName ? { ...p, categories: updatedCats, images: updatedImages } : p);
     await saveProductionsList(newList);
     showToast(`Categoría "${catName}" eliminada de ${selectedProdName}.`);
   };
@@ -976,6 +952,13 @@ export default function GalleryAdmin() {
     setIsProdUploading(true);
     let successCount = 0;
     let errorCount = 0;
+    const currentProd = productionsList.find(p => p.name === selectedProdName);
+    if (!currentProd) {
+      setIsProdUploading(false);
+      return;
+    }
+
+    let existingImages = [...(currentProd.images || [])];
 
     for (let i = 0; i < prodUploadFiles.length; i++) {
       try {
@@ -983,12 +966,12 @@ export default function GalleryAdmin() {
         const base64Preview = prodUploadPreviews[i];
         if (!base64Preview) continue;
         const base64Data = base64Preview.split(',')[1];
+        
+        // raw: true saves image to disk without touching images_canonical.json
         const payload = {
           filename: file.name,
           base64Data,
-          hover_caption: prodUploadCaption || file.name.split('.')[0],
-          categories: prodUploadCategories,
-          productions: [selectedProdName]
+          raw: true
         };
 
         const url = isLocal ? '/api/upload' : '/api.php?action=upload';
@@ -1012,14 +995,25 @@ export default function GalleryAdmin() {
         const resData = await response.json();
         if (resData.error) throw new Error(resData.error);
 
-        const newEntry = resData.data;
-        setGallery(prev => [...prev, newEntry].sort((a, b) => (a.order || 0) - (b.order || 0)));
+        const newImageEntry = {
+          filename: resData.data.filename,
+          src_url: resData.data.src_url,
+          hover_caption: prodUploadCaption || file.name.split('.')[0].replace(/[_-]/g, ' '),
+          categories: [...prodUploadCategories],
+          order: existingImages.length + 1,
+          hidden: false
+        };
+
+        existingImages.push(newImageEntry);
         successCount++;
       } catch (err) {
         console.error(`Error uploading ${prodUploadFiles[i]?.name}:`, err);
         errorCount++;
       }
     }
+
+    const newList = productionsList.map(p => p.name === selectedProdName ? { ...p, images: existingImages } : p);
+    await saveProductionsList(newList);
 
     setProdUploadFiles([]);
     setProdUploadPreviews([]);
@@ -1035,20 +1029,71 @@ export default function GalleryAdmin() {
     }
   };
 
-  // Toggle image assignment to a production
-  const toggleImageProductionAssignment = (item, prodName) => {
-    const prods = item.productions || [];
-    const hasProd = prods.includes(prodName);
-    const newProds = hasProd ? prods.filter(p => p !== prodName) : [...prods, prodName];
-    setGallery(prev => prev.map(g => g.filename === item.filename ? { ...g, productions: newProds } : g));
-    setHasChanges(true);
+  // Image handlers for active production
+  const handleProdImageCaptionChange = (imgIndex, newCaption) => {
+    const currentProd = productionsList.find(p => p.name === selectedProdName);
+    if (!currentProd) return;
+    const images = [...(currentProd.images || [])];
+    if (!images[imgIndex]) return;
+    images[imgIndex] = { ...images[imgIndex], hover_caption: newCaption };
+    const newList = productionsList.map(p => p.name === selectedProdName ? { ...p, images } : p);
+    setProductionsList(newList);
+  };
+
+  const handleProdImageCaptionBlur = async () => {
+    await saveProductionsList(productionsList);
+  };
+
+  const handleToggleProdImageCategory = async (imgIndex, catName) => {
+    const currentProd = productionsList.find(p => p.name === selectedProdName);
+    if (!currentProd) return;
+    const images = [...(currentProd.images || [])];
+    if (!images[imgIndex]) return;
+    const curCats = images[imgIndex].categories || [];
+    const newCats = curCats.includes(catName) ? curCats.filter(c => c !== catName) : [...curCats, catName];
+    images[imgIndex] = { ...images[imgIndex], categories: newCats };
+    const newList = productionsList.map(p => p.name === selectedProdName ? { ...p, images } : p);
+    await saveProductionsList(newList);
+  };
+
+  const handleMoveProdImage = async (imgIndex, direction) => {
+    const currentProd = productionsList.find(p => p.name === selectedProdName);
+    if (!currentProd) return;
+    const images = [...(currentProd.images || [])];
+    const targetIdx = imgIndex + direction;
+    if (targetIdx < 0 || targetIdx >= images.length) return;
+    const [moved] = images.splice(imgIndex, 1);
+    images.splice(targetIdx, 0, moved);
+    const reordered = images.map((img, idx) => ({ ...img, order: idx + 1 }));
+    const newList = productionsList.map(p => p.name === selectedProdName ? { ...p, images: reordered } : p);
+    await saveProductionsList(newList);
+  };
+
+  const handleToggleProdImageVisibility = async (imgIndex) => {
+    const currentProd = productionsList.find(p => p.name === selectedProdName);
+    if (!currentProd) return;
+    const images = [...(currentProd.images || [])];
+    if (!images[imgIndex]) return;
+    images[imgIndex] = { ...images[imgIndex], hidden: !images[imgIndex].hidden };
+    const newList = productionsList.map(p => p.name === selectedProdName ? { ...p, images } : p);
+    await saveProductionsList(newList);
+  };
+
+  const handleDeleteProdImage = async (imgIndex) => {
+    const currentProd = productionsList.find(p => p.name === selectedProdName);
+    if (!currentProd) return;
+    const item = currentProd.images[imgIndex];
+    if (!window.confirm(`¿Eliminar la foto "${item?.hover_caption || item?.filename}" de ${selectedProdName}?`)) return;
+    const images = currentProd.images.filter((_, idx) => idx !== imgIndex);
+    const reordered = images.map((img, idx) => ({ ...img, order: idx + 1 }));
+    const newList = productionsList.map(p => p.name === selectedProdName ? { ...p, images: reordered } : p);
+    await saveProductionsList(newList);
+    showToast('Foto eliminada de la producción.');
   };
 
   const activeProd = productionsList.find(p => p.name === selectedProdName) || null;
-  const activeProdCategories = activeProd ? activeProd.categories : [];
-
-  // All images belonging to active production
-  const activeProdImages = gallery.filter(item => (item.productions || []).includes(selectedProdName));
+  const activeProdCategories = activeProd ? (activeProd.categories || []) : [];
+  const activeProdImages = activeProd ? (activeProd.images || []) : [];
 
   // Filtered by category filter + search query
   const filteredProdImages = activeProdImages.filter(item => {
@@ -1288,53 +1333,6 @@ export default function GalleryAdmin() {
         <section className="lg:col-span-1">
           <div className="bg-[#090909] border border-neutral-900 p-6 rounded-lg shadow-xl relative overflow-hidden group hover:border-neutral-800 transition-all duration-300">
             <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-red-950 to-transparent"></div>
-            
-            <div className="mb-8 border-b border-neutral-900 pb-8">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold uppercase tracking-wider text-white font-['Oswald'] flex items-center gap-2">
-                  <Film size={18} className="text-red-700" /> Producciones
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setActiveAdminScreen('productions')}
-                  className="text-[10px] text-red-500 hover:text-red-400 font-['Oswald'] uppercase tracking-wider underline flex items-center gap-1"
-                >
-                  Abrir pantalla completa ➔
-                </button>
-              </div>
-              <div className="flex gap-2 mb-4">
-                <input 
-                  type="text" 
-                  value={newProductionName}
-                  onChange={(e) => setNewProductionName(e.target.value)}
-                  placeholder="Nueva producción..."
-                  className="flex-1 bg-[#0d0d0d] border border-neutral-900 focus:border-red-950 focus:outline-none p-2 text-sm text-white rounded font-sans transition-colors"
-                />
-                <button 
-                  type="button"
-                  onClick={() => handleCreateProduction(newProductionName)}
-                  className="px-4 py-2 bg-red-950/20 border border-red-950 text-white text-xs font-bold uppercase tracking-wider font-['Oswald'] hover:bg-red-900 transition-colors"
-                >
-                  Agregar
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {productionsList.map(prod => {
-                  const pName = typeof prod === 'string' ? prod : prod.name;
-                  return (
-                    <div key={pName} className="flex items-center gap-1 bg-neutral-900/40 border border-neutral-800 rounded px-2 py-1 text-xs text-neutral-300">
-                      <span>{pName}</span>
-                      <button 
-                        onClick={() => handleDeleteProduction(pName)}
-                        className="text-neutral-500 hover:text-red-400"
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
 
             <h2 className="text-xl font-bold uppercase tracking-wider text-white mb-6 font-['Oswald'] flex items-center gap-2">
               <Upload size={18} className="text-red-700" /> subir nuevo trabajo
@@ -1624,33 +1622,6 @@ export default function GalleryAdmin() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs uppercase tracking-widest text-neutral-400 font-['Oswald'] mb-3">
-                  Producciones asociadas
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {productionsList.map(prod => {
-                    const pName = typeof prod === 'string' ? prod : prod.name;
-                    const isSelected = uploadProductions.includes(pName);
-                    return (
-                      <button
-                        key={pName}
-                        type="button"
-                        onClick={() => toggleUploadProduction(pName)}
-                        className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 border rounded transition-all duration-300 font-['Oswald'] cursor-pointer ${
-                          isSelected 
-                            ? 'bg-red-950/40 border-red-800 text-white shadow-glow'
-                            : 'bg-transparent border-neutral-900 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300'
-                        }`}
-                      >
-                        {pName}
-                      </button>
-                    );
-                  })}
-                  {productionsList.length === 0 && <span className="text-xs text-neutral-600 italic">No hay producciones. Agrégalas arriba.</span>}
-                </div>
-              </div>
-
               {/* Submit Button */}
               <button
                 type="submit"
@@ -1825,29 +1796,6 @@ export default function GalleryAdmin() {
                               );
                             })}
                           </div>
-                          {productionsList.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {productionsList.map(prod => {
-                                const pName = typeof prod === 'string' ? prod : prod.name;
-                                const isSelected = (item.productions || []).includes(pName);
-                                return (
-                                  <button
-                                    key={pName}
-                                    type="button"
-                                    onClick={() => toggleItemProduction(item, pName)}
-                                    title={`Alternar ${pName}`}
-                                    className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 border rounded transition-all duration-300 font-['Oswald'] cursor-pointer ${
-                                      isSelected 
-                                        ? 'bg-red-950/60 border-red-800 text-white'
-                                        : 'bg-transparent border-neutral-900 text-neutral-600 hover:border-neutral-700 hover:text-neutral-400'
-                                    }`}
-                                  >
-                                    {pName}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
                         </div>
                       </div>
 
@@ -1942,7 +1890,7 @@ export default function GalleryAdmin() {
                 </h2>
               </div>
               <p className="text-xs text-neutral-400 italic mb-4">
-                Selecciona una producción para gestionar sus fotos y categorías especializadas.
+                Proyectos, películas y series independientes. Cada producción tiene sus propias fotos y categorías.
               </p>
 
               {/* Producciones list */}
@@ -1955,7 +1903,7 @@ export default function GalleryAdmin() {
                   productionsList.map(prod => {
                     const pName = typeof prod === 'string' ? prod : prod.name;
                     const isSelected = selectedProdName === pName;
-                    const count = gallery.filter(i => (i.productions || []).includes(pName)).length;
+                    const count = Array.isArray(prod.images) ? prod.images.length : 0;
                     const catCount = Array.isArray(prod.categories) ? prod.categories.length : 0;
 
                     return (
@@ -2038,7 +1986,7 @@ export default function GalleryAdmin() {
                   </span>
                 </div>
                 <p className="text-xs text-neutral-400 italic mb-4">
-                  Crea categorías especializadas para <strong className="text-white font-semibold not-italic font-['Oswald']">{selectedProdName}</strong> (ej. Personajes, Escenas, Envejecimiento, Prótesis).
+                  Crea categorías específicas para <strong className="text-white font-semibold not-italic font-['Oswald']">{selectedProdName}</strong> (ej. Personajes, Escenas, Envejecimiento, Prótesis).
                 </p>
 
                 {/* Form to add category */}
@@ -2066,7 +2014,7 @@ export default function GalleryAdmin() {
                   <div className="flex flex-wrap gap-1.5">
                     {activeProdCategories.length === 0 ? (
                       <div className="text-xs text-neutral-600 italic py-2">
-                        No hay categorías personalizadas en esta producción. Agrega la primera arriba.
+                        No hay categorías en esta producción. Agrega la primera arriba.
                       </div>
                     ) : (
                       activeProdCategories.map(cat => {
@@ -2117,7 +2065,7 @@ export default function GalleryAdmin() {
                   <Upload size={16} className="text-red-700" /> Subir Fotos a esta Producción
                 </h2>
                 <p className="text-xs text-neutral-400 italic mb-5">
-                  Las fotos seleccionadas se asignarán automáticamente a <strong className="text-white font-semibold not-italic font-['Oswald']">{selectedProdName}</strong>.
+                  Las fotos seleccionadas se guardarán exclusivamente dentro de <strong className="text-white font-semibold not-italic font-['Oswald']">{selectedProdName}</strong>.
                 </p>
 
                 <form onSubmit={handleProdUploadSubmit} className="space-y-5">
@@ -2208,60 +2156,33 @@ export default function GalleryAdmin() {
                     />
                   </div>
 
-                  {/* Categorías a asignar */}
-                  <div className="space-y-3">
-                    {activeProdCategories.length > 0 && (
-                      <div>
-                        <label className="block text-[10px] uppercase tracking-widest text-neutral-500 font-['Oswald'] mb-2">
-                          Categorías de {selectedProdName}:
-                        </label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {activeProdCategories.map(cat => {
-                            const isSelected = prodUploadCategories.includes(cat);
-                            return (
-                              <button
-                                key={cat}
-                                type="button"
-                                onClick={() => toggleProdUploadCategory(cat)}
-                                className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border rounded transition-all font-['Oswald'] cursor-pointer ${
-                                  isSelected 
-                                    ? 'bg-red-950 border-red-700 text-white shadow-glow'
-                                    : 'bg-transparent border-neutral-900 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300'
-                                }`}
-                              >
-                                {cat}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
+                  {/* Categorías de la producción */}
+                  {activeProdCategories.length > 0 && (
                     <div>
                       <label className="block text-[10px] uppercase tracking-widest text-neutral-500 font-['Oswald'] mb-2">
-                        Categorías Generales:
+                        Asignar categorías de {selectedProdName}:
                       </label>
                       <div className="flex flex-wrap gap-1.5">
-                        {CATEGORIES.map(cat => {
+                        {activeProdCategories.map(cat => {
                           const isSelected = prodUploadCategories.includes(cat);
                           return (
                             <button
                               key={cat}
                               type="button"
                               onClick={() => toggleProdUploadCategory(cat)}
-                              className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 border rounded transition-all font-['Oswald'] cursor-pointer ${
+                              className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border rounded transition-all font-['Oswald'] cursor-pointer ${
                                 isSelected 
                                   ? 'bg-red-950 border-red-700 text-white shadow-glow'
-                                  : 'bg-transparent border-neutral-900 text-neutral-600 hover:border-neutral-700 hover:text-neutral-400'
+                                  : 'bg-transparent border-neutral-900 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300'
                               }`}
                             >
-                              {CATEGORY_LABELS[cat]}
+                              {cat}
                             </button>
                           );
                         })}
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Submit */}
                   <button
@@ -2303,22 +2224,12 @@ export default function GalleryAdmin() {
                     {selectedProdName || 'Selecciona una producción'}
                   </h2>
                   <p className="text-xs text-neutral-500 font-sans mt-1">
-                    {activeProdImages.length} trabajo{activeProdImages.length !== 1 ? 's' : ''} asignado{activeProdImages.length !== 1 ? 's' : ''}
+                    {activeProdImages.length} foto{activeProdImages.length !== 1 ? 's' : ''} exclusiva{activeProdImages.length !== 1 ? 's' : ''} de esta producción
                     {activeProdCategories.length > 0 && ` • ${activeProdCategories.length} categoría(s) propia(s)`}
                   </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
-                  {selectedProdName && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAssignModal(true)}
-                      className="px-4 py-2 border border-red-950 bg-red-950/30 hover:bg-red-900 text-white text-xs font-bold uppercase tracking-wider font-['Oswald'] rounded transition-all cursor-pointer flex items-center gap-1.5"
-                    >
-                      <Link2 size={13} /> Vincular Fotos Existentes
-                    </button>
-                  )}
-
                   {/* Search within this production */}
                   <div className="relative">
                     <Search size={14} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-500" />
@@ -2374,7 +2285,7 @@ export default function GalleryAdmin() {
               <div className="text-xs uppercase tracking-widest text-neutral-500 font-['Oswald'] flex items-center px-4 py-2 border-b border-neutral-900 bg-neutral-950/20 mb-2">
                 <div className="w-12 text-center">Orden</div>
                 <div className="w-16 ml-4">Miniatura</div>
-                <div className="flex-grow ml-6">Detalles y Categorías</div>
+                <div className="flex-grow ml-6">Leyenda y Categorías</div>
                 <div className="w-32 text-right">Acciones</div>
               </div>
 
@@ -2387,18 +2298,13 @@ export default function GalleryAdmin() {
                       {!selectedProdName 
                         ? 'Selecciona una producción en la columna izquierda.' 
                         : activeProdImages.length === 0 
-                          ? 'Esta producción aún no tiene fotos asignadas.' 
-                          : 'No hay fotos con el filtro o búsqueda seleccionada.'}
+                          ? 'Esta producción aún no tiene fotos. Sube imágenes desde el panel izquierdo para comenzar.' 
+                          : 'No hay fotos que coincidan con la búsqueda o filtro seleccionado.'}
                     </p>
-                    {selectedProdName && activeProdImages.length === 0 && (
-                      <p className="text-xs text-neutral-600">
-                        Sube fotos en el panel izquierdo o haz clic en "+ Vincular Fotos Existentes" para agregar fotos ya presentes en la galería.
-                      </p>
-                    )}
                   </div>
                 ) : (
                   filteredProdImages.map((item, idx) => {
-                    const fullIndex = gallery.findIndex(g => g.filename === item.filename);
+                    const realIndex = activeProdImages.findIndex(i => i.filename === item.filename);
 
                     return (
                       <article
@@ -2407,34 +2313,24 @@ export default function GalleryAdmin() {
                           item.hidden ? 'opacity-40 border-dashed border-red-950/40 bg-black/40' : ''
                         }`}
                       >
-                        {/* Order Input */}
+                        {/* Order Display */}
                         <div className="flex items-center gap-1 w-full sm:w-auto">
                           <span className="text-xs font-['Oswald'] text-neutral-500 uppercase mr-2 sm:hidden">Orden:</span>
-                          <input 
-                            type="number"
-                            value={fullIndex + 1}
-                            onChange={(e) => handleOrderChange(item, e.target.value)}
-                            className="w-12 bg-black border border-neutral-900 text-center py-1.5 text-xs text-white rounded font-sans focus:outline-none focus:border-red-950 font-bold"
-                            min="1"
-                            max={gallery.length}
-                          />
+                          <span className="w-10 bg-black border border-neutral-900 text-center py-1.5 text-xs text-white rounded font-sans font-bold">
+                            {idx + 1}
+                          </span>
                         </div>
 
                         {/* Thumbnail */}
                         <div className="w-16 h-16 rounded overflow-hidden bg-black flex-shrink-0 border border-neutral-900 relative group/thumb">
                           <img 
                             src={item.src_url} 
-                            alt="Thumb" 
+                            alt={item.hover_caption || 'Producción'} 
                             className="w-full h-full object-cover group-hover/thumb:scale-110 transition-transform duration-500" 
                             onError={(e) => {
                               e.target.src = `/imagenes web/imagenes/${item.filename}`;
                             }}
                           />
-                          {item.is_video && (
-                            <div className="absolute inset-0 bg-red-950/40 flex items-center justify-center">
-                              <Play size={16} fill="white" className="text-white" />
-                            </div>
-                          )}
                         </div>
 
                         {/* Details & Categories */}
@@ -2442,7 +2338,8 @@ export default function GalleryAdmin() {
                           <input 
                             type="text"
                             value={item.hover_caption || ''}
-                            onChange={(e) => handleCaptionChange(item, e.target.value)}
+                            onChange={(e) => handleProdImageCaptionChange(realIndex, e.target.value)}
+                            onBlur={handleProdImageCaptionBlur}
                             className="w-full bg-transparent border-b border-transparent hover:border-neutral-800 focus:border-red-950 focus:outline-none pb-0.5 text-sm font-semibold text-white tracking-wide font-sans transition-colors"
                             placeholder="Sin leyenda..."
                           />
@@ -2456,54 +2353,29 @@ export default function GalleryAdmin() {
                             )}
                           </div>
 
-                          {/* Interactive Categories on this photo */}
-                          <div className="space-y-1 mt-1">
-                            {/* Production categories */}
-                            {activeProdCategories.length > 0 && (
-                              <div className="flex flex-wrap gap-1">
-                                {activeProdCategories.map(cat => {
-                                  const isSelected = (item.categories || []).includes(cat);
-                                  return (
-                                    <button
-                                      key={cat}
-                                      type="button"
-                                      onClick={() => toggleItemCategory(item, cat)}
-                                      title={`Alternar categoría "${cat}" en esta foto`}
-                                      className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 border rounded transition-all font-['Oswald'] cursor-pointer ${
-                                        isSelected 
-                                          ? 'bg-red-900 border-red-700 text-white'
-                                          : 'bg-neutral-900/30 border-neutral-900 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300'
-                                      }`}
-                                    >
-                                      {cat}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            )}
-
-                            {/* Global categories */}
-                            <div className="flex flex-wrap gap-1">
-                              {CATEGORIES.map(cat => {
+                          {/* Categories of this production on this photo */}
+                          {activeProdCategories.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {activeProdCategories.map(cat => {
                                 const isSelected = (item.categories || []).includes(cat);
                                 return (
                                   <button
                                     key={cat}
                                     type="button"
-                                    onClick={() => toggleItemCategory(item, cat)}
-                                    title={`Alternar ${CATEGORY_LABELS[cat]}`}
+                                    onClick={() => handleToggleProdImageCategory(realIndex, cat)}
+                                    title={`Alternar categoría "${cat}" en esta foto`}
                                     className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 border rounded transition-all font-['Oswald'] cursor-pointer ${
                                       isSelected 
-                                        ? 'bg-red-950/60 border-red-800 text-white'
-                                        : 'bg-transparent border-neutral-900 text-neutral-600 hover:border-neutral-700 hover:text-neutral-400'
+                                        ? 'bg-red-900 border-red-700 text-white'
+                                        : 'bg-neutral-900/30 border-neutral-900 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300'
                                     }`}
                                   >
-                                    {CATEGORY_LABELS[cat]}
+                                    {cat}
                                   </button>
                                 );
                               })}
                             </div>
-                          </div>
+                          )}
                         </div>
 
                         {/* Actions & Ordering */}
@@ -2511,16 +2383,16 @@ export default function GalleryAdmin() {
                           {/* Order buttons */}
                           <div className="flex flex-col">
                             <button 
-                              onClick={() => handleMoveItem(fullIndex, -1)}
-                              disabled={fullIndex === 0}
+                              onClick={() => handleMoveProdImage(realIndex, -1)}
+                              disabled={realIndex === 0}
                               title="Mover arriba"
                               className="p-1 rounded hover:bg-neutral-800 text-neutral-500 hover:text-white disabled:opacity-20 cursor-pointer"
                             >
                               <ChevronUp size={14} />
                             </button>
                             <button 
-                              onClick={() => handleMoveItem(fullIndex, 1)}
-                              disabled={fullIndex === gallery.length - 1}
+                              onClick={() => handleMoveProdImage(realIndex, 1)}
+                              disabled={realIndex === activeProdImages.length - 1}
                               title="Mover abajo"
                               className="p-1 rounded hover:bg-neutral-800 text-neutral-500 hover:text-white disabled:opacity-20 cursor-pointer"
                             >
@@ -2530,7 +2402,7 @@ export default function GalleryAdmin() {
 
                           {/* Visibility */}
                           <button 
-                            onClick={() => handleToggleVisibility(item)}
+                            onClick={() => handleToggleProdImageVisibility(realIndex)}
                             title={item.hidden ? "Mostrar en la web" : "Ocultar en la web"}
                             className={`p-1.5 rounded border border-neutral-900 transition-colors ml-1 cursor-pointer ${
                               item.hidden 
@@ -2541,28 +2413,10 @@ export default function GalleryAdmin() {
                             {item.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
                           </button>
 
-                          {/* Replace image */}
+                          {/* Delete permanently from this production */}
                           <button 
-                            onClick={() => handleEditImageClick(item)}
-                            title="Reemplazar Imagen/Miniatura"
-                            className="p-1.5 rounded border border-neutral-900 bg-[#0d0d0d] text-neutral-500 hover:bg-neutral-800 hover:text-white transition-colors ml-1 cursor-pointer"
-                          >
-                            <ImagePlus size={14} />
-                          </button>
-
-                          {/* Unassign from this production */}
-                          <button 
-                            onClick={() => toggleImageProductionAssignment(item, selectedProdName)}
-                            title={`Desvincular de "${selectedProdName}"`}
-                            className="p-1.5 rounded border border-neutral-900 bg-[#0d0d0d] text-neutral-500 hover:bg-yellow-950/30 hover:text-yellow-400 hover:border-yellow-900 transition-colors ml-1 cursor-pointer"
-                          >
-                            <Unlink size={14} />
-                          </button>
-
-                          {/* Delete permanently */}
-                          <button 
-                            onClick={() => handleDeleteImage(item)}
-                            title="Eliminar definitivamente de la galería"
+                            onClick={() => handleDeleteProdImage(realIndex)}
+                            title="Eliminar foto de esta producción"
                             className="p-1.5 rounded border border-neutral-900 bg-[#0d0d0d] text-neutral-500 hover:bg-red-950 hover:text-red-400 hover:border-red-900 transition-colors ml-1 cursor-pointer"
                           >
                             <Trash2 size={14} />
@@ -2576,98 +2430,6 @@ export default function GalleryAdmin() {
             </div>
           </section>
         </main>
-      )}
-
-      {/* Modal to link existing gallery photos to current production */}
-      {showAssignModal && (
-        <div className="fixed inset-0 z-[1200] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-fadeIn">
-          <div className="max-w-4xl w-full bg-[#0a0a0a] border border-neutral-800 rounded-xl p-6 shadow-2xl max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between pb-4 border-b border-neutral-900">
-              <div>
-                <span className="text-[10px] font-['Oswald'] uppercase tracking-widest text-red-700 font-bold block">
-                  Vincular fotos a producción
-                </span>
-                <h3 className="text-xl font-bold uppercase font-['Oswald'] text-white">
-                  {selectedProdName}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowAssignModal(false)}
-                className="p-2 text-neutral-500 hover:text-white hover:bg-neutral-900 rounded-full transition-colors cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="py-4">
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-500" />
-                <input 
-                  type="text"
-                  value={assignSearch}
-                  onChange={(e) => setAssignSearch(e.target.value)}
-                  placeholder="Buscar por leyenda o nombre de archivo..."
-                  className="w-full bg-[#0d0d0d] border border-neutral-900 hover:border-neutral-800 focus:border-red-950 focus:outline-none pl-9 pr-4 py-2.5 text-xs text-white rounded font-sans transition-colors"
-                />
-              </div>
-              <p className="text-[11px] text-neutral-500 italic mt-2">
-                Haz clic sobre una foto para vincularla o desvincularla de <strong className="text-neutral-300 not-italic font-semibold">{selectedProdName}</strong>.
-              </p>
-            </div>
-
-            <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 custom-scrollbar py-2">
-              {gallery
-                .filter(item => {
-                  if (!assignSearch.trim()) return true;
-                  const q = assignSearch.toLowerCase();
-                  return (item.hover_caption || '').toLowerCase().includes(q) || (item.filename || '').toLowerCase().includes(q);
-                })
-                .map(item => {
-                  const isAssigned = (item.productions || []).includes(selectedProdName);
-                  return (
-                    <div
-                      key={item.filename}
-                      onClick={() => toggleImageProductionAssignment(item, selectedProdName)}
-                      className={`relative aspect-square rounded overflow-hidden border cursor-pointer transition-all duration-200 group ${
-                        isAssigned
-                          ? 'border-red-600 ring-2 ring-red-800/80'
-                          : 'border-neutral-900 hover:border-neutral-700 opacity-60 hover:opacity-100'
-                      }`}
-                    >
-                      <img 
-                        src={item.src_url} 
-                        alt={item.hover_caption} 
-                        className="w-full h-full object-cover" 
-                        onError={(e) => { e.target.src = `/imagenes web/imagenes/${item.filename}`; }}
-                      />
-                      {isAssigned && (
-                        <div className="absolute top-1.5 right-1.5 bg-red-700 text-white p-1 rounded-full shadow">
-                          <Check size={12} />
-                        </div>
-                      )}
-                      <div className="absolute inset-x-0 bottom-0 bg-black/85 p-1 text-[9px] text-white truncate font-sans">
-                        {item.hover_caption || item.filename}
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
-
-            <div className="pt-4 border-t border-neutral-900 flex justify-between items-center">
-              <span className="text-xs text-neutral-400 font-['Oswald'] uppercase tracking-wider">
-                {gallery.filter(i => (i.productions || []).includes(selectedProdName)).length} fotos vinculadas en total
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowAssignModal(false)}
-                className="px-6 py-2 bg-red-950/60 border border-red-800 text-white font-['Oswald'] text-xs font-bold uppercase tracking-wider rounded hover:bg-red-900 transition-all cursor-pointer"
-              >
-                Listo
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* Modal to rename production */}

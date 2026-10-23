@@ -1,12 +1,13 @@
 [
   {
     "name": "100 Años de soledad",
+    "description": "Serie de Netflix basada en la obra de Gabriel García Márquez",
     "categories": [
       "Caracterización",
       "Envejecimiento",
       "Prótesis",
       "Heridas"
     ],
-    "description": "Serie de Netflix basada en la obra de Gabriel García Márquez"
+    "images": []
   }
 ]
