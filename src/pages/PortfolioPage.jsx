@@ -69,7 +69,28 @@ function GalleryItem({ img, index, onClick, isRectangular, views }) {
   const ref = useRef(null);
   const [visible, setVisible] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
+
+  // Calculate reliable image URL (prefers local path over broken WordPress URLs)
+  const resolveSrc = (item) => {
+    if (!item) return '';
+    if (item.src_url && !item.src_url.includes('/wp-content/') && !item.src_url.includes('maquillajefxmexico.com/wp-content')) {
+      return item.src_url;
+    }
+    if (item.filename) {
+      return `/imagenes web/imagenes/${item.filename}`;
+    }
+    return item.src_url || '';
+  };
+
+  const [currentSrc, setCurrentSrc] = useState(() => resolveSrc(img));
   const viewCount = views && views[img.filename] != null ? views[img.filename] : 0;
+
+  useEffect(() => {
+    setCurrentSrc(resolveSrc(img));
+    setError(false);
+    setLoaded(false);
+  }, [img.src_url, img.filename]);
 
   useEffect(() => {
     const el = ref.current;
@@ -87,6 +108,18 @@ function GalleryItem({ img, index, onClick, isRectangular, views }) {
     return () => observer.disconnect();
   }, []);
 
+  const handleError = () => {
+    if (img.filename) {
+      const localFallback = `/imagenes web/imagenes/${img.filename}`;
+      if (currentSrc !== localFallback) {
+        setCurrentSrc(localFallback);
+        return;
+      }
+    }
+    setError(true);
+    setLoaded(true);
+  };
+
   return (
     <article
       ref={ref}
@@ -95,15 +128,16 @@ function GalleryItem({ img, index, onClick, isRectangular, views }) {
       style={{ animationDelay: `${(index % 16) * 25}ms` }}
     >
       {/* skeleton */}
-      {!loaded && <div className="sq-skeleton" />}
+      {!loaded && !error && <div className="sq-skeleton" />}
 
-      {visible && (
+      {visible && !error && (
         <img
-          src={img.src_url}
+          src={currentSrc}
           alt={img.hover_caption}
           className={`sq-img ${loaded ? 'sq-img--loaded' : ''}`}
           loading="lazy"
           onLoad={() => setLoaded(true)}
+          onError={handleError}
         />
       )}
 
@@ -149,8 +183,19 @@ function getEmbedUrl(videoUrl) {
 function Lightbox({ images, index, views, onClose, onPrev, onNext }) {
   const img = images[index] || {};
   const viewCount = views && img.filename && views[img.filename] != null ? views[img.filename] : 0;
-  const initialHighRes = img.src_url ? img.src_url.replace(/-\d+x\d+(?=\.[a-z]+$)/i, '') : '';
-  const [imgSrc, setImgSrc] = useState(initialHighRes);
+  
+  const resolveHighRes = (item) => {
+    if (!item) return '';
+    if (item.src_url && !item.src_url.includes('/wp-content/') && !item.src_url.includes('maquillajefxmexico.com/wp-content')) {
+      return item.src_url.replace(/-\d+x\d+(?=\.[a-z]+$)/i, '');
+    }
+    if (item.filename) {
+      return `/imagenes web/imagenes/${item.filename}`;
+    }
+    return item.src_url ? item.src_url.replace(/-\d+x\d+(?=\.[a-z]+$)/i, '') : '';
+  };
+
+  const [imgSrc, setImgSrc] = useState(() => resolveHighRes(img));
   const imgRef = useRef(null);
   const containerRef = useRef(null);
 
@@ -163,13 +208,12 @@ function Lightbox({ images, index, views, onClose, onPrev, onNext }) {
 
   // Reset zoom & source when switching images
   useEffect(() => {
-    if (!img.src_url) return;
-    const highRes = img.src_url.replace(/-\d+x\d+(?=\.[a-z]+$)/i, '');
-    setImgSrc(highRes);
+    if (!img) return;
+    setImgSrc(resolveHighRes(img));
     setScale(1);
     setTranslate({ x: 0, y: 0 });
     setLoaded(false);
-  }, [index, img.src_url]);
+  }, [index, img]);
 
   const handleImageError = () => {
     if (!img.filename) return;
