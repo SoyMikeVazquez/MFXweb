@@ -99,23 +99,6 @@ export default function GalleryAdmin() {
   const [productionsList, setProductionsList] = useState(() => normalizeProductions(initialProductionsData));
   const [activeAdminScreen, setActiveAdminScreen] = useState('gallery'); // 'gallery' | 'productions'
 
-  // Fetch productions dynamically on mount
-  useEffect(() => {
-    fetch('/imagenes web/imagenes/productions.json?t=' + Date.now())
-      .then(res => (res.ok ? res.json() : null))
-      .then(data => {
-        if (Array.isArray(data)) {
-          const norm = normalizeProductions(data);
-          setProductionsList(norm);
-          setSelectedProdName(prev => {
-            if (norm.some(p => p.name === prev)) return prev;
-            return norm[0]?.name || '';
-          });
-        }
-      })
-      .catch(() => {});
-  }, []);
-
   // Productions screen specific states
   const [selectedProdName, setSelectedProdName] = useState(() => {
     const list = normalizeProductions(initialProductionsData);
@@ -134,6 +117,23 @@ export default function GalleryAdmin() {
   const [prodUploadFolder, setProdUploadFolder] = useState('');
   const [isProdUploading, setIsProdUploading] = useState(false);
   const prodFileInputRef = useRef(null);
+
+  // Fetch productions dynamically on mount
+  useEffect(() => {
+    fetch('/imagenes web/imagenes/productions.json?t=' + Date.now())
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (Array.isArray(data)) {
+          const norm = normalizeProductions(data);
+          setProductionsList(norm);
+          setSelectedProdName(prev => {
+            if (norm.some(p => p.name === prev)) return prev;
+            return norm[0]?.name || '';
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const [newProductionName, setNewProductionName] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
@@ -1341,8 +1341,8 @@ export default function GalleryAdmin() {
               <span className="text-2xl font-bold font-['Oswald'] text-white mt-1 block">{activeProdImages.length}</span>
             </div>
             <div className="bg-[#0b0b0b] border border-neutral-900 p-4 rounded text-center">
-              <span className="block text-xs uppercase tracking-widest text-neutral-500 font-['Oswald']">CATEGORÍAS PROPIAS</span>
-              <span className="text-2xl font-bold font-['Oswald'] text-red-800 mt-1 block">{activeProdCategories.length}</span>
+              <span className="block text-xs uppercase tracking-widest text-neutral-500 font-['Oswald']">CARPETAS</span>
+              <span className="text-2xl font-bold font-['Oswald'] text-red-800 mt-1 block">{activeProdFolders.length}</span>
             </div>
           </div>
         )}
