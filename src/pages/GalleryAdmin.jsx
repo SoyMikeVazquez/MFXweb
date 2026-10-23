@@ -23,6 +23,8 @@ import {
   Tag,
   Plus,
   Edit2,
+  Folder,
+  FolderOpen,
   FolderPlus,
   Link2,
   Unlink,
@@ -54,18 +56,40 @@ const CATEGORY_LABELS = {
   'Costumes Masks': 'COSTUMES & MASKS',
 };
 
-// Normalize productions to object form { name: string, categories: string[], description?: string, images?: any[] }
+// Normalize productions to object form { name: string, folders: string[], description?: string, images?: any[] }
 const normalizeProductions = (list) => {
   if (!Array.isArray(list)) return [];
   return list.map(item => {
     if (typeof item === 'string') {
-      return { name: item, categories: [], description: '', images: [] };
+      return { name: item, folders: [], categories: [], description: '', images: [] };
     }
+    const folders = Array.isArray(item.folders)
+      ? item.folders
+      : (Array.isArray(item.categories) ? item.categories : []);
+
+    const rawImages = Array.isArray(item.images) ? item.images : [];
+    const images = rawImages.map((img, idx) => {
+      let folder = img.folder;
+      if (!folder && Array.isArray(img.categories) && img.categories.length > 0) {
+        folder = img.categories[0];
+      }
+      return {
+        src_url: img.src_url || '',
+        filename: img.filename || '',
+        hover_caption: img.hover_caption || '',
+        folder: folder || '',
+        categories: folder ? [folder] : [],
+        order: typeof img.order === 'number' ? img.order : idx + 1,
+        hidden: img.hidden === true
+      };
+    });
+
     return {
       name: item.name || '',
-      categories: Array.isArray(item.categories) ? item.categories : [],
+      folders: folders,
+      categories: folders, // backward compat
       description: item.description || '',
-      images: Array.isArray(item.images) ? item.images : []
+      images: images
     };
   }).filter(p => p.name.trim().length > 0);
 };
@@ -98,16 +122,16 @@ export default function GalleryAdmin() {
     return list[0]?.name || '';
   });
   const [newProdNameInput, setNewProdNameInput] = useState('');
-  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newFolderName, setNewFolderName] = useState('');
   const [searchProdQuery, setSearchProdQuery] = useState('');
-  const [selectedProdCatFilter, setSelectedProdCatFilter] = useState('All');
+  const [selectedProdFolderFilter, setSelectedProdFolderFilter] = useState('All');
   const [editingProdName, setEditingProdName] = useState(null); // { oldName, newName }
 
   // Production batch upload form states
   const [prodUploadFiles, setProdUploadFiles] = useState([]);
   const [prodUploadPreviews, setProdUploadPreviews] = useState([]);
   const [prodUploadCaption, setProdUploadCaption] = useState('');
-  const [prodUploadCategories, setProdUploadCategories] = useState([]);
+  const [prodUploadFolder, setProdUploadFolder] = useState('');
   const [isProdUploading, setIsProdUploading] = useState(false);
   const prodFileInputRef = useRef(null);
 
@@ -787,6 +811,27 @@ export default function GalleryAdmin() {
 
   // Save productions list helper (stores normalized objects array)
   const saveProductionsList = async (newList) => {
+    const payload = newList.map(p => {
+      const folders = p.folders || p.categories || [];
+      const images = (p.images || []).map((img, idx) => ({
+        src_url: img.src_url || '',
+        filename: img.filename || '',
+        hover_caption: img.hover_caption || '',
+        folder: img.folder || '',
+        categories: img.folder ? [img.folder] : [],
+        order: typeof img.order === 'number' ? img.order : idx + 1,
+        hidden: img.hidden === true
+      }));
+
+      return {
+        name: p.name,
+        description: p.description || '',
+        folders: folders,
+        categories: folders, // backward compat
+        images: images
+      };
+    });
+
     const url = isLocal ? '/api/productions' : '/api.php?action=productions';
     const headers = { 'Content-Type': 'application/json' };
     if (!isLocal) {
@@ -798,10 +843,10 @@ export default function GalleryAdmin() {
       const response = await fetch(url, {
         method: 'POST',
         headers,
-        body: JSON.stringify(newList)
+        body: JSON.stringify(payload)
       });
       if (!response.ok) throw new Error('Error al guardar producciones');
-      setProductionsList(newList);
+      setProductionsList(payload);
       setNewProdNameInput('');
       showToast('Producciones actualizadas con éxito.');
     } catch (err) {
@@ -823,7 +868,7 @@ export default function GalleryAdmin() {
       return;
     }
     
-    const newProd = { name: pName, categories: [], description: '', images: [] };
+    const newProd = { name: pName, folders: [], categories: [], description: '', images: [] };
     const newList = [...productionsList, newProd];
     await saveProductionsList(newList);
     setSelectedProdName(pName);
@@ -863,49 +908,46 @@ export default function GalleryAdmin() {
     showToast(`Producción renombrada a "${clean}".`);
   };
 
-  // Category management within active production
-  const handleAddCategoryToActiveProd = async (e) => {
+  // Folder management within active production
+  const handleAddFolderToActiveProd = async (e) => {
     if (e) e.preventDefault();
-    const cleanCat = newCategoryName.trim();
-    if (!cleanCat) return;
+    const cleanFolder = newFolderName.trim();
+    if (!cleanFolder) return;
     if (!selectedProdName) {
       showToast('Selecciona una producción primero.', 'error');
       return;
     }
     const currentProd = productionsList.find(p => p.name === selectedProdName);
     if (!currentProd) return;
-    if (currentProd.categories.includes(cleanCat)) {
-      showToast('Esta categoría ya está agregada en esta producción.', 'error');
+    const currentFolders = currentProd.folders || currentProd.categories || [];
+    if (currentFolders.some(f => f.toLowerCase() === cleanFolder.toLowerCase())) {
+      showToast('Esta carpeta ya existe en esta producción.', 'error');
       return;
     }
-    const updated = [...currentProd.categories, cleanCat];
-    const newList = productionsList.map(p => p.name === selectedProdName ? { ...p, categories: updated } : p);
+    const updated = [...currentFolders, cleanFolder];
+    const newList = productionsList.map(p => p.name === selectedProdName ? { ...p, folders: updated, categories: updated } : p);
     await saveProductionsList(newList);
-    setNewCategoryName('');
-    showToast(`Categoría "${cleanCat}" agregada a ${selectedProdName}.`);
+    setNewFolderName('');
+    showToast(`Carpeta "${cleanFolder}" creada en ${selectedProdName}.`);
   };
 
-  const handleDeleteCategoryFromActiveProd = async (catName) => {
-    if (!window.confirm(`¿Eliminar la categoría "${catName}" de ${selectedProdName}?`)) return;
+  const handleDeleteFolderFromActiveProd = async (folderName) => {
+    if (!window.confirm(`¿Eliminar la carpeta "${folderName}" de ${selectedProdName}? Las fotos dentro quedarán sin carpeta asignada.`)) return;
     const currentProd = productionsList.find(p => p.name === selectedProdName);
     if (!currentProd) return;
-    const updatedCats = currentProd.categories.filter(c => c !== catName);
+    const currentFolders = currentProd.folders || currentProd.categories || [];
+    const updatedFolders = currentFolders.filter(f => f !== folderName);
     const updatedImages = (currentProd.images || []).map(img => ({
       ...img,
-      categories: (img.categories || []).filter(c => c !== catName)
+      folder: img.folder === folderName ? '' : img.folder,
+      categories: (img.categories || []).filter(c => c !== folderName)
     }));
-    const newList = productionsList.map(p => p.name === selectedProdName ? { ...p, categories: updatedCats, images: updatedImages } : p);
+    const newList = productionsList.map(p => p.name === selectedProdName ? { ...p, folders: updatedFolders, categories: updatedFolders, images: updatedImages } : p);
     await saveProductionsList(newList);
-    showToast(`Categoría "${catName}" eliminada de ${selectedProdName}.`);
-  };
-
-  // Toggle production category on upload form
-  const toggleProdUploadCategory = (cat) => {
-    if (prodUploadCategories.includes(cat)) {
-      setProdUploadCategories(prodUploadCategories.filter(c => c !== cat));
-    } else {
-      setProdUploadCategories([...prodUploadCategories, cat]);
+    if (selectedProdFolderFilter === folderName) {
+      setSelectedProdFolderFilter('All');
     }
+    showToast(`Carpeta "${folderName}" eliminada de ${selectedProdName}.`);
   };
 
   // Handle files selected for production upload
@@ -999,7 +1041,8 @@ export default function GalleryAdmin() {
           filename: resData.data.filename,
           src_url: resData.data.src_url,
           hover_caption: prodUploadCaption || file.name.split('.')[0].replace(/[_-]/g, ' '),
-          categories: [...prodUploadCategories],
+          folder: prodUploadFolder || '',
+          categories: prodUploadFolder ? [prodUploadFolder] : [],
           order: existingImages.length + 1,
           hidden: false
         };
@@ -1018,7 +1061,7 @@ export default function GalleryAdmin() {
     setProdUploadFiles([]);
     setProdUploadPreviews([]);
     setProdUploadCaption('');
-    setProdUploadCategories([]);
+    setProdUploadFolder('');
     if (prodFileInputRef.current) prodFileInputRef.current.value = '';
     setIsProdUploading(false);
 
@@ -1044,16 +1087,19 @@ export default function GalleryAdmin() {
     await saveProductionsList(productionsList);
   };
 
-  const handleToggleProdImageCategory = async (imgIndex, catName) => {
+  const handleProdImageFolderChange = async (imgIndex, newFolder) => {
     const currentProd = productionsList.find(p => p.name === selectedProdName);
     if (!currentProd) return;
     const images = [...(currentProd.images || [])];
     if (!images[imgIndex]) return;
-    const curCats = images[imgIndex].categories || [];
-    const newCats = curCats.includes(catName) ? curCats.filter(c => c !== catName) : [...curCats, catName];
-    images[imgIndex] = { ...images[imgIndex], categories: newCats };
+    images[imgIndex] = {
+      ...images[imgIndex],
+      folder: newFolder,
+      categories: newFolder ? [newFolder] : []
+    };
     const newList = productionsList.map(p => p.name === selectedProdName ? { ...p, images } : p);
     await saveProductionsList(newList);
+    showToast(newFolder ? `Foto movida a carpeta "${newFolder}".` : 'Foto sin carpeta asignada.');
   };
 
   const handleMoveProdImage = async (imgIndex, direction) => {
@@ -1062,6 +1108,19 @@ export default function GalleryAdmin() {
     const images = [...(currentProd.images || [])];
     const targetIdx = imgIndex + direction;
     if (targetIdx < 0 || targetIdx >= images.length) return;
+    const [moved] = images.splice(imgIndex, 1);
+    images.splice(targetIdx, 0, moved);
+    const reordered = images.map((img, idx) => ({ ...img, order: idx + 1 }));
+    const newList = productionsList.map(p => p.name === selectedProdName ? { ...p, images: reordered } : p);
+    await saveProductionsList(newList);
+  };
+
+  const handleMoveProdImageExtreme = async (imgIndex, toBottom) => {
+    const currentProd = productionsList.find(p => p.name === selectedProdName);
+    if (!currentProd) return;
+    const images = [...(currentProd.images || [])];
+    const targetIdx = toBottom ? images.length - 1 : 0;
+    if (imgIndex === targetIdx) return;
     const [moved] = images.splice(imgIndex, 1);
     images.splice(targetIdx, 0, moved);
     const reordered = images.map((img, idx) => ({ ...img, order: idx + 1 }));
@@ -1092,15 +1151,15 @@ export default function GalleryAdmin() {
   };
 
   const activeProd = productionsList.find(p => p.name === selectedProdName) || null;
-  const activeProdCategories = activeProd ? (activeProd.categories || []) : [];
+  const activeProdFolders = activeProd ? (activeProd.folders || activeProd.categories || []) : [];
   const activeProdImages = activeProd ? (activeProd.images || []) : [];
 
-  // Filtered by category filter + search query
+  // Filtered by folder filter + search query
   const filteredProdImages = activeProdImages.filter(item => {
     const matchesSearch = item.hover_caption?.toLowerCase().includes(searchProdQuery.toLowerCase()) || 
                           item.filename?.toLowerCase().includes(searchProdQuery.toLowerCase());
-    if (selectedProdCatFilter === 'All') return matchesSearch;
-    return matchesSearch && (item.categories || []).includes(selectedProdCatFilter);
+    if (selectedProdFolderFilter === 'All') return matchesSearch;
+    return matchesSearch && (item.folder === selectedProdFolderFilter || (item.categories || []).includes(selectedProdFolderFilter));
   });
 
   // Filter gallery items
@@ -1909,7 +1968,7 @@ export default function GalleryAdmin() {
                     return (
                       <div
                         key={pName}
-                        onClick={() => { setSelectedProdName(pName); setSelectedProdCatFilter('All'); }}
+                        onClick={() => { setSelectedProdName(pName); setSelectedProdFolderFilter('All'); }}
                         className={`w-full text-left p-3 rounded border transition-all flex items-center justify-between cursor-pointer ${
                           isSelected
                             ? 'bg-red-950/40 border-red-800 text-white shadow-glow'
@@ -1921,7 +1980,7 @@ export default function GalleryAdmin() {
                             {pName}
                           </span>
                           <span className="text-[10px] text-neutral-500 font-sans">
-                            {count} foto{count !== 1 ? 's' : ''} • {catCount} categoría{catCount !== 1 ? 's' : ''}
+                            {count} foto{count !== 1 ? 's' : ''} • {catCount} carpeta{catCount !== 1 ? 's' : ''}
                           </span>
                         </div>
 
@@ -1972,58 +2031,58 @@ export default function GalleryAdmin() {
               </form>
             </div>
 
-            {/* 2. Categorías de la Producción Activa */}
+            {/* 2. Carpetas de la Producción Activa */}
             {selectedProdName && (
               <div className="bg-[#090909] border border-neutral-900 p-6 rounded-lg shadow-xl relative overflow-hidden group hover:border-neutral-800 transition-all duration-300">
                 <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-red-950 to-transparent"></div>
                 
                 <div className="flex items-center justify-between mb-2">
                   <h2 className="text-lg font-bold uppercase tracking-wider text-white font-['Oswald'] flex items-center gap-2">
-                    <Tag size={16} className="text-red-700" /> Categorías de la Producción
+                    <Folder size={16} className="text-red-700" /> Carpetas del Proyecto
                   </h2>
                   <span className="text-[10px] bg-red-950/60 border border-red-800/60 text-red-300 px-2 py-0.5 rounded font-['Oswald'] font-bold">
-                    {activeProdCategories.length}
+                    {activeProdFolders.length}
                   </span>
                 </div>
                 <p className="text-xs text-neutral-400 italic mb-4">
-                  Crea categorías específicas para <strong className="text-white font-semibold not-italic font-['Oswald']">{selectedProdName}</strong> (ej. Personajes, Escenas, Envejecimiento, Prótesis).
+                  Crea carpetas para ordenar y estructurar las fotos de <strong className="text-white font-semibold not-italic font-['Oswald']">{selectedProdName}</strong> (ej. Personajes, Escenas, Envejecimiento, Prótesis).
                 </p>
 
-                {/* Form to add category */}
-                <form onSubmit={handleAddCategoryToActiveProd} className="flex gap-2 mb-4">
+                {/* Form to add folder */}
+                <form onSubmit={handleAddFolderToActiveProd} className="flex gap-2 mb-4">
                   <input 
                     type="text" 
-                    value={newCategoryName}
-                    onChange={(e) => setNewCategoryName(e.target.value)}
-                    placeholder="Nueva categoría (ej. Personajes)..."
+                    value={newFolderName}
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                    placeholder="Nueva carpeta (ej. Personajes)..."
                     className="flex-1 bg-[#0d0d0d] border border-neutral-900 focus:border-red-950 focus:outline-none p-2 text-xs text-white rounded font-sans transition-colors"
                   />
                   <button 
                     type="submit"
                     className="px-3 py-2 bg-red-950/20 border border-red-950 text-white text-xs font-bold uppercase tracking-wider font-['Oswald'] hover:bg-red-900 transition-colors cursor-pointer flex items-center gap-1"
                   >
-                    <Plus size={13} /> Agregar
+                    <FolderPlus size={13} /> Crear
                   </button>
                 </form>
 
-                {/* List of custom categories */}
+                {/* List of folders */}
                 <div className="space-y-1.5">
                   <span className="text-[10px] uppercase tracking-widest text-neutral-500 font-['Oswald'] block mb-2">
-                    Categorías de esta producción:
+                    Carpetas de esta producción:
                   </span>
                   <div className="flex flex-wrap gap-1.5">
-                    {activeProdCategories.length === 0 ? (
+                    {activeProdFolders.length === 0 ? (
                       <div className="text-xs text-neutral-600 italic py-2">
-                        No hay categorías en esta producción. Agrega la primera arriba.
+                        No hay carpetas en esta producción aún. Crea la primera arriba.
                       </div>
                     ) : (
-                      activeProdCategories.map(cat => {
-                        const count = activeProdImages.filter(i => (i.categories || []).includes(cat)).length;
-                        const isFiltered = selectedProdCatFilter === cat;
+                      activeProdFolders.map(folder => {
+                        const count = activeProdImages.filter(i => i.folder === folder || (i.categories || []).includes(folder)).length;
+                        const isFiltered = selectedProdFolderFilter === folder;
 
                         return (
                           <div 
-                            key={cat}
+                            key={folder}
                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs border transition-colors ${
                               isFiltered
                                 ? 'bg-red-900 border-red-700 text-white'
@@ -2032,17 +2091,18 @@ export default function GalleryAdmin() {
                           >
                             <button
                               type="button"
-                              onClick={() => setSelectedProdCatFilter(isFiltered ? 'All' : cat)}
-                              className="font-['Oswald'] uppercase tracking-wider font-semibold text-[11px] text-left cursor-pointer"
-                              title={`Filtrar fotos por "${cat}"`}
+                              onClick={() => setSelectedProdFolderFilter(isFiltered ? 'All' : folder)}
+                              className="font-['Oswald'] uppercase tracking-wider font-semibold text-[11px] text-left cursor-pointer flex items-center gap-1"
+                              title={`Filtrar fotos por carpeta "${folder}"`}
                             >
-                              {cat}
-                              <span className="ml-1 text-[9px] opacity-75 font-mono">({count})</span>
+                              <Folder size={11} className={isFiltered ? 'text-white' : 'text-red-600'} />
+                              {folder}
+                              <span className="ml-0.5 text-[9px] opacity-75 font-mono">({count})</span>
                             </button>
                             <button 
                               type="button"
-                              onClick={() => handleDeleteCategoryFromActiveProd(cat)}
-                              title={`Eliminar categoría ${cat}`}
+                              onClick={() => handleDeleteFolderFromActiveProd(folder)}
+                              title={`Eliminar carpeta ${folder}`}
                               className="text-neutral-500 hover:text-red-400 ml-1 cursor-pointer"
                             >
                               <X size={12} />
@@ -2156,33 +2216,27 @@ export default function GalleryAdmin() {
                     />
                   </div>
 
-                  {/* Categorías de la producción */}
-                  {activeProdCategories.length > 0 && (
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-widest text-neutral-500 font-['Oswald'] mb-2">
-                        Asignar categorías de {selectedProdName}:
-                      </label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {activeProdCategories.map(cat => {
-                          const isSelected = prodUploadCategories.includes(cat);
-                          return (
-                            <button
-                              key={cat}
-                              type="button"
-                              onClick={() => toggleProdUploadCategory(cat)}
-                              className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border rounded transition-all font-['Oswald'] cursor-pointer ${
-                                isSelected 
-                                  ? 'bg-red-950 border-red-700 text-white shadow-glow'
-                                  : 'bg-transparent border-neutral-900 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300'
-                              }`}
-                            >
-                              {cat}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+                  {/* Carpeta selector for upload */}
+                  <div>
+                    <label className="block text-[11px] uppercase tracking-widest text-neutral-400 font-['Oswald'] mb-1.5 flex items-center gap-1.5">
+                      <Folder size={12} className="text-red-600" /> Guardar en Carpeta de {selectedProdName}:
+                    </label>
+                    <select
+                      value={prodUploadFolder}
+                      onChange={(e) => setProdUploadFolder(e.target.value)}
+                      className="w-full bg-[#0d0d0d] border border-neutral-900 hover:border-neutral-800 focus:border-red-950 focus:outline-none p-2.5 text-xs text-white rounded font-sans transition-colors cursor-pointer"
+                    >
+                      <option value="">Sin Carpeta (General)</option>
+                      {activeProdFolders.map(folder => (
+                        <option key={folder} value={folder}>📁 {folder}</option>
+                      ))}
+                    </select>
+                    {activeProdFolders.length === 0 && (
+                      <p className="text-[10px] text-neutral-500 italic mt-1">
+                        Puedes crear carpetas en el bloque superior para organizar las fotos de esta producción.
+                      </p>
+                    )}
+                  </div>
 
                   {/* Submit */}
                   <button
@@ -2225,7 +2279,7 @@ export default function GalleryAdmin() {
                   </h2>
                   <p className="text-xs text-neutral-500 font-sans mt-1">
                     {activeProdImages.length} foto{activeProdImages.length !== 1 ? 's' : ''} exclusiva{activeProdImages.length !== 1 ? 's' : ''} de esta producción
-                    {activeProdCategories.length > 0 && ` • ${activeProdCategories.length} categoría(s) propia(s)`}
+                    {activeProdFolders.length > 0 && ` • ${activeProdFolders.length} carpeta(s)`}
                   </p>
                 </div>
 
@@ -2244,37 +2298,38 @@ export default function GalleryAdmin() {
                 </div>
               </div>
 
-              {/* Category Filters for this production */}
+              {/* Folder Filters for this production */}
               {selectedProdName && (
                 <div className="flex items-center gap-2 flex-wrap pb-4 mb-4 border-b border-neutral-900/60">
-                  <span className="text-[10px] uppercase font-['Oswald'] text-neutral-500 tracking-widest mr-1">
-                    Filtrar por categoría:
+                  <span className="text-[10px] uppercase font-['Oswald'] text-neutral-500 tracking-widest mr-1 flex items-center gap-1">
+                    <Folder size={12} className="text-red-700" /> Carpetas:
                   </span>
                   <button
                     type="button"
-                    onClick={() => setSelectedProdCatFilter('All')}
-                    className={`text-[10px] font-['Oswald'] font-bold uppercase tracking-wider px-3 py-1 rounded transition-colors cursor-pointer ${
-                      selectedProdCatFilter === 'All'
+                    onClick={() => setSelectedProdFolderFilter('All')}
+                    className={`text-[10px] font-['Oswald'] font-bold uppercase tracking-wider px-3 py-1.5 rounded transition-colors cursor-pointer ${
+                      selectedProdFolderFilter === 'All'
                         ? 'bg-red-950 border border-red-800 text-white'
                         : 'text-neutral-500 hover:text-white border border-neutral-900 bg-[#0d0d0d]'
                     }`}
                   >
-                    TODAS ({activeProdImages.length})
+                    TODAS LAS FOTOS ({activeProdImages.length})
                   </button>
-                  {activeProdCategories.map(cat => {
-                    const count = activeProdImages.filter(i => (i.categories || []).includes(cat)).length;
+                  {activeProdFolders.map(folder => {
+                    const count = activeProdImages.filter(i => i.folder === folder || (i.categories || []).includes(folder)).length;
                     return (
                       <button
-                        key={cat}
+                        key={folder}
                         type="button"
-                        onClick={() => setSelectedProdCatFilter(cat)}
-                        className={`text-[10px] font-['Oswald'] font-bold uppercase tracking-wider px-3 py-1 rounded transition-colors cursor-pointer ${
-                          selectedProdCatFilter === cat
+                        onClick={() => setSelectedProdFolderFilter(folder)}
+                        className={`text-[10px] font-['Oswald'] font-bold uppercase tracking-wider px-3 py-1.5 rounded transition-colors cursor-pointer flex items-center gap-1.5 ${
+                          selectedProdFolderFilter === folder
                             ? 'bg-red-950 border border-red-800 text-white'
                             : 'text-neutral-400 hover:text-white border border-neutral-900 bg-[#0d0d0d]'
                         }`}
                       >
-                        {cat.toUpperCase()} ({count})
+                        <Folder size={11} className={selectedProdFolderFilter === folder ? 'text-white' : 'text-red-600'} />
+                        {folder.toUpperCase()} ({count})
                       </button>
                     );
                   })}
@@ -2285,21 +2340,21 @@ export default function GalleryAdmin() {
               <div className="text-xs uppercase tracking-widest text-neutral-500 font-['Oswald'] flex items-center px-4 py-2 border-b border-neutral-900 bg-neutral-950/20 mb-2">
                 <div className="w-12 text-center">Orden</div>
                 <div className="w-16 ml-4">Miniatura</div>
-                <div className="flex-grow ml-6">Leyenda y Categorías</div>
-                <div className="w-32 text-right">Acciones</div>
+                <div className="flex-grow ml-6">Título y Carpeta</div>
+                <div className="w-48 text-right">Acciones</div>
               </div>
 
-              {/* Photos List */}
-              <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+              {/* Strictly Vertical Photos List */}
+              <div className="flex flex-col space-y-3 max-h-[65vh] overflow-y-auto pr-2 custom-scrollbar w-full">
                 {filteredProdImages.length === 0 ? (
                   <div className="py-16 text-center text-neutral-500 italic space-y-3">
-                    <Film size={36} className="mx-auto text-neutral-700 opacity-60" />
+                    <FolderOpen size={40} className="mx-auto text-neutral-700 opacity-60" />
                     <p className="text-sm">
                       {!selectedProdName 
                         ? 'Selecciona una producción en la columna izquierda.' 
                         : activeProdImages.length === 0 
                           ? 'Esta producción aún no tiene fotos. Sube imágenes desde el panel izquierdo para comenzar.' 
-                          : 'No hay fotos que coincidan con la búsqueda o filtro seleccionado.'}
+                          : `No hay fotos en la carpeta "${selectedProdFolderFilter}".`}
                     </p>
                   </div>
                 ) : (
@@ -2309,13 +2364,13 @@ export default function GalleryAdmin() {
                     return (
                       <article
                         key={`${item.filename}-${idx}`}
-                        className={`bg-[#0b0b0b] hover:bg-[#0e0e0e] border border-neutral-950 hover:border-neutral-900/60 p-4 rounded flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all duration-300 ${
+                        className={`w-full bg-[#0b0b0b] hover:bg-[#0e0e0e] border border-neutral-900 hover:border-neutral-800 p-4 rounded flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all duration-300 ${
                           item.hidden ? 'opacity-40 border-dashed border-red-950/40 bg-black/40' : ''
                         }`}
                       >
                         {/* Order Display */}
-                        <div className="flex items-center gap-1 w-full sm:w-auto">
-                          <span className="text-xs font-['Oswald'] text-neutral-500 uppercase mr-2 sm:hidden">Orden:</span>
+                        <div className="flex items-center gap-1 w-full md:w-auto">
+                          <span className="text-xs font-['Oswald'] text-neutral-500 uppercase mr-2 md:hidden">Orden:</span>
                           <span className="w-10 bg-black border border-neutral-900 text-center py-1.5 text-xs text-white rounded font-sans font-bold">
                             {idx + 1}
                           </span>
@@ -2333,15 +2388,15 @@ export default function GalleryAdmin() {
                           />
                         </div>
 
-                        {/* Details & Categories */}
-                        <div className="flex-grow space-y-2 w-full sm:w-auto">
+                        {/* Details & Folder selector */}
+                        <div className="flex-grow space-y-2 w-full md:w-auto">
                           <input 
                             type="text"
                             value={item.hover_caption || ''}
                             onChange={(e) => handleProdImageCaptionChange(realIndex, e.target.value)}
                             onBlur={handleProdImageCaptionBlur}
                             className="w-full bg-transparent border-b border-transparent hover:border-neutral-800 focus:border-red-950 focus:outline-none pb-0.5 text-sm font-semibold text-white tracking-wide font-sans transition-colors"
-                            placeholder="Sin leyenda..."
+                            placeholder="Título de la imagen..."
                           />
 
                           <div className="flex items-center gap-2 flex-wrap">
@@ -2353,52 +2408,60 @@ export default function GalleryAdmin() {
                             )}
                           </div>
 
-                          {/* Categories of this production on this photo */}
-                          {activeProdCategories.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {activeProdCategories.map(cat => {
-                                const isSelected = (item.categories || []).includes(cat);
-                                return (
-                                  <button
-                                    key={cat}
-                                    type="button"
-                                    onClick={() => handleToggleProdImageCategory(realIndex, cat)}
-                                    title={`Alternar categoría "${cat}" en esta foto`}
-                                    className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 border rounded transition-all font-['Oswald'] cursor-pointer ${
-                                      isSelected 
-                                        ? 'bg-red-900 border-red-700 text-white'
-                                        : 'bg-neutral-900/30 border-neutral-900 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300'
-                                    }`}
-                                  >
-                                    {cat}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
+                          {/* Folder assignment */}
+                          <div className="flex items-center gap-2 pt-1">
+                            <Folder size={12} className="text-red-700" />
+                            <span className="text-[10px] font-['Oswald'] uppercase tracking-wider text-neutral-500">
+                              Carpeta:
+                            </span>
+                            <select
+                              value={item.folder || ''}
+                              onChange={(e) => handleProdImageFolderChange(realIndex, e.target.value)}
+                              className="bg-[#121212] border border-neutral-800 hover:border-neutral-700 text-neutral-200 text-xs rounded px-2.5 py-1 focus:outline-none focus:border-red-900 font-sans cursor-pointer"
+                            >
+                              <option value="">Sin carpeta (General)</option>
+                              {activeProdFolders.map(folder => (
+                                <option key={folder} value={folder}>📁 {folder}</option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
 
                         {/* Actions & Ordering */}
-                        <div className="flex items-center gap-1 self-end sm:self-center">
-                          {/* Order buttons */}
-                          <div className="flex flex-col">
-                            <button 
-                              onClick={() => handleMoveProdImage(realIndex, -1)}
-                              disabled={realIndex === 0}
-                              title="Mover arriba"
-                              className="p-1 rounded hover:bg-neutral-800 text-neutral-500 hover:text-white disabled:opacity-20 cursor-pointer"
-                            >
-                              <ChevronUp size={14} />
-                            </button>
-                            <button 
-                              onClick={() => handleMoveProdImage(realIndex, 1)}
-                              disabled={realIndex === activeProdImages.length - 1}
-                              title="Mover abajo"
-                              className="p-1 rounded hover:bg-neutral-800 text-neutral-500 hover:text-white disabled:opacity-20 cursor-pointer"
-                            >
-                              <ChevronDown size={14} />
-                            </button>
-                          </div>
+                        <div className="flex items-center gap-1 self-end md:self-center">
+                          {/* Reorder buttons */}
+                          <button 
+                            onClick={() => handleMoveProdImageExtreme(realIndex, false)}
+                            disabled={realIndex === 0}
+                            title="Enviar al Inicio"
+                            className="p-1.5 rounded bg-[#0d0d0d] hover:bg-[#1a1a1a] text-neutral-500 hover:text-white border border-neutral-900 disabled:opacity-20 cursor-pointer transition-colors"
+                          >
+                            <ChevronsUp size={14} />
+                          </button>
+                          <button 
+                            onClick={() => handleMoveProdImage(realIndex, -1)}
+                            disabled={realIndex === 0}
+                            title="Subir un lugar"
+                            className="p-1.5 rounded bg-[#0d0d0d] hover:bg-[#1a1a1a] text-neutral-500 hover:text-white border border-neutral-900 disabled:opacity-20 cursor-pointer transition-colors"
+                          >
+                            <ChevronUp size={14} />
+                          </button>
+                          <button 
+                            onClick={() => handleMoveProdImage(realIndex, 1)}
+                            disabled={realIndex === activeProdImages.length - 1}
+                            title="Bajar un lugar"
+                            className="p-1.5 rounded bg-[#0d0d0d] hover:bg-[#1a1a1a] text-neutral-500 hover:text-white border border-neutral-900 disabled:opacity-20 cursor-pointer transition-colors"
+                          >
+                            <ChevronDown size={14} />
+                          </button>
+                          <button 
+                            onClick={() => handleMoveProdImageExtreme(realIndex, true)}
+                            disabled={realIndex === activeProdImages.length - 1}
+                            title="Enviar al Final"
+                            className="p-1.5 rounded bg-[#0d0d0d] hover:bg-[#1a1a1a] text-neutral-500 hover:text-white border border-neutral-900 disabled:opacity-20 cursor-pointer transition-colors"
+                          >
+                            <ChevronsDown size={14} />
+                          </button>
 
                           {/* Visibility */}
                           <button 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, X, ChevronLeft, ChevronRight, Mail, Play, Eye } from 'lucide-react';
+import { ArrowLeft, X, ChevronLeft, ChevronRight, Mail, Play, Eye, Folder } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import imagesData from '../../public/imagenes web/imagenes/images_canonical.json';
 import productionsData from '../../public/imagenes web/imagenes/productions.json';
@@ -53,7 +53,7 @@ function prepareImages(portfolioImages, productionsList, category, filterMode = 
         if (img.hidden === true) return false;
         if (!img.src_url || !img.hover_caption) return false;
         if (subCategory && subCategory !== 'All') {
-          return img.categories?.includes(subCategory);
+          return img.folder === subCategory || (img.categories || []).includes(subCategory);
         }
         return true;
       })
@@ -586,15 +586,15 @@ export default function PortfolioPage() {
         </div>
       </nav>
 
-      {/* ── Subcategories Bar for Active Production ─────────────────────── */}
-      {filterMode === 'production' && displayCategory !== 'All' && currentProdObj?.categories?.length > 0 && (
+      {/* ── Carpetas Bar for Active Production ─────────────────────── */}
+      {filterMode === 'production' && displayCategory !== 'All' && ((currentProdObj?.folders?.length > 0) || (currentProdObj?.categories?.length > 0)) && (
         <div className="bg-[#080808] border-b border-neutral-900 py-2.5 px-6 flex items-center justify-center gap-2 flex-wrap">
-          <span className="text-[10px] uppercase font-['Oswald'] text-neutral-500 tracking-widest mr-2">
-            Categorías:
+          <span className="text-[10px] uppercase font-['Oswald'] text-neutral-500 tracking-widest mr-2 flex items-center gap-1.5">
+            <Folder size={12} className="text-red-700" /> Carpetas:
           </span>
           <button
             onClick={() => setSubCategory('All')}
-            className={`text-[10px] font-['Oswald'] font-bold uppercase tracking-wider px-2.5 py-1 rounded transition-colors ${
+            className={`text-[10px] font-['Oswald'] font-bold uppercase tracking-wider px-3 py-1 rounded transition-colors ${
               subCategory === 'All'
                 ? 'bg-red-950 text-white border border-red-800'
                 : 'text-neutral-400 hover:text-white border border-neutral-900 bg-black/40'
@@ -602,16 +602,17 @@ export default function PortfolioPage() {
           >
             Todas
           </button>
-          {currentProdObj.categories.map((c) => (
+          {(currentProdObj.folders || currentProdObj.categories || []).map((c) => (
             <button
               key={c}
               onClick={() => setSubCategory(c)}
-              className={`text-[10px] font-['Oswald'] font-bold uppercase tracking-wider px-2.5 py-1 rounded transition-colors ${
+              className={`text-[10px] font-['Oswald'] font-bold uppercase tracking-wider px-3 py-1 rounded transition-colors flex items-center gap-1.5 ${
                 subCategory === c
                   ? 'bg-red-950 text-white border border-red-800'
                   : 'text-neutral-400 hover:text-white border border-neutral-900 bg-black/40'
               }`}
             >
+              <Folder size={11} className={subCategory === c ? 'text-white' : 'text-red-700'} />
               {c}
             </button>
           ))}
