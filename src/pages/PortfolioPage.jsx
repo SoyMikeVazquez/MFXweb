@@ -66,10 +66,9 @@ function prepareImages(images, category, filterMode = 'category') {
 
 /* ─── Lazy-loaded square image ────────────────────────────────────────────── */
 function GalleryItem({ img, index, onClick, isRectangular, views }) {
-  const ref = useRef(null);
-  const [visible, setVisible] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
+  const imgRef = useRef(null);
 
   // Calculate reliable image URL (prefers local path over broken WordPress URLs)
   const resolveSrc = (item) => {
@@ -86,27 +85,16 @@ function GalleryItem({ img, index, onClick, isRectangular, views }) {
   const [currentSrc, setCurrentSrc] = useState(() => resolveSrc(img));
   const viewCount = views && views[img.filename] != null ? views[img.filename] : 0;
 
-  useEffect(() => {
-    setCurrentSrc(resolveSrc(img));
-    setError(false);
-    setLoaded(false);
-  }, [img.src_url, img.filename]);
+  // Immediate check if image is already cached/complete in memory
+  const checkComplete = useCallback(() => {
+    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
+      setLoaded(true);
+    }
+  }, []);
 
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: '200px' }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+    checkComplete();
+  }, [checkComplete, currentSrc]);
 
   const handleError = () => {
     if (img.filename) {
@@ -120,23 +108,28 @@ function GalleryItem({ img, index, onClick, isRectangular, views }) {
     setLoaded(true);
   };
 
+  const handleLoad = () => {
+    setLoaded(true);
+  };
+
   return (
     <article
-      ref={ref}
       className={`gallery-sq-item relative group ${isRectangular ? 'gallery-sq-item--video' : ''}`}
       onClick={() => onClick(index)}
       style={{ animationDelay: `${(index % 16) * 25}ms` }}
     >
-      {/* skeleton */}
+      {/* skeleton shimmer */}
       {!loaded && !error && <div className="sq-skeleton" />}
 
-      {visible && !error && (
+      {!error && (
         <img
+          ref={imgRef}
           src={currentSrc}
           alt={img.hover_caption}
           className={`sq-img ${loaded ? 'sq-img--loaded' : ''}`}
           loading="lazy"
-          onLoad={() => setLoaded(true)}
+          decoding="async"
+          onLoad={handleLoad}
           onError={handleError}
         />
       )}
@@ -463,7 +456,12 @@ export default function PortfolioPage() {
     setTimeout(() => {
       setDisplayCategory(cat);
       setTransitioning(false);
-    }, 220);
+      // Ensure viewport is at top of grid so items are immediately visible
+      const filterEl = document.querySelector('.pf-filters');
+      if (filterEl && window.scrollY > filterEl.offsetTop) {
+        window.scrollTo({ top: filterEl.offsetTop - 10, behavior: 'smooth' });
+      }
+    }, 180);
   }, [activeCategory, transitioning]);
 
   // Lock scroll for lightbox
@@ -544,7 +542,14 @@ export default function PortfolioPage() {
         <div className="pf-count">{filtered.length} trabajos</div>
         <div className={`pf-grid ${displayCategory === 'Videos' ? 'pf-grid--videos' : ''}`}>
           {filtered.map((img, idx) => (
-            <GalleryItem key={img.filename} img={img} index={idx} onClick={openLb} isRectangular={displayCategory === 'Videos'} views={views} />
+            <GalleryItem
+              key={`${displayCategory}-${img.filename}-${img.order ?? idx}`}
+              img={img}
+              index={idx}
+              onClick={openLb}
+              isRectangular={displayCategory === 'Videos'}
+              views={views}
+            />
           ))}
         </div>
       </main>
