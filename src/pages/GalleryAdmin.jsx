@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, Component } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -94,7 +94,7 @@ const normalizeProductions = (list) => {
   }).filter(p => p.name.trim().length > 0);
 };
 
-export default function GalleryAdmin() {
+function GalleryAdminContent() {
   const [gallery, setGallery] = useState([]);
   const [productionsList, setProductionsList] = useState(() => normalizeProductions(initialProductionsData));
   const [activeAdminScreen, setActiveAdminScreen] = useState('gallery'); // 'gallery' | 'productions'
@@ -380,13 +380,6 @@ export default function GalleryAdmin() {
     }
   };
 
-  const toggleUploadProduction = (prod) => {
-    if (uploadProductions.includes(prod)) {
-      setUploadProductions(uploadProductions.filter(p => p !== prod));
-    } else {
-      setUploadProductions([...uploadProductions, prod]);
-    }
-  };
 
   const uploadRawFile = async (file, base64Preview) => {
     const base64Data = base64Preview.split(',')[1];
@@ -2590,5 +2583,52 @@ export default function GalleryAdmin() {
         </div>
       </footer>
     </div>
+  );
+}
+
+class AdminErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("Admin Error:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-center p-6 text-center">
+          <div className="bg-[#0e0e0e] border border-red-900/60 p-8 rounded-xl max-w-lg shadow-2xl">
+            <h2 className="text-xl font-bold font-['Oswald'] uppercase tracking-wider text-red-500 mb-3">
+              Ocurrió un error al cargar la vista
+            </h2>
+            <p className="text-xs text-neutral-400 mb-6 font-mono bg-black/60 p-3 rounded border border-neutral-900 text-left overflow-x-auto">
+              {this.state.error?.message || 'Error desconocido'}
+            </p>
+            <div className="flex justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => { this.setState({ hasError: false }); window.location.reload(); }}
+                className="px-5 py-2.5 bg-red-950 border border-red-800 text-white rounded font-['Oswald'] text-xs uppercase tracking-wider hover:bg-red-900 cursor-pointer"
+              >
+                Recargar Pantalla
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default function GalleryAdmin(props) {
+  return (
+    <AdminErrorBoundary>
+      <GalleryAdminContent {...props} />
+    </AdminErrorBoundary>
   );
 }
