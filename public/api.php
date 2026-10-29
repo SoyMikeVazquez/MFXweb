@@ -6,7 +6,7 @@
 
 // Enable CORS for frontend integration
 header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Headers: Content-Type, X-Admin-User, X-Admin-Password");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Supabase-Token, X-Admin-User, X-Admin-Password, apikey");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -123,20 +123,96 @@ if ($action === 'view') {
     exit;
 }
 
-// ─── AUTHENTICATION CHECK (FOR ADMIN ACTIONS ONLY) ───────────────────────────
-$headers = getallheaders();
-$admin_user = isset($headers['X-Admin-User']) ? $headers['X-Admin-User'] : '';
-$admin_password = isset($headers['X-Admin-Password']) ? $headers['X-Admin-Password'] : '';
+// ─── AUTHENTICATION CHECK (SUPABASE JWT OR ADMIN CREDENTIALS) ───────────────────
+function get_auth_header($name) {
+    if (function_exists('getallheaders')) {
+        $headers = getallheaders();
+        foreach ($headers as $k => $v) {
+            if (strcasecmp($k, $name) === 0) {
+                return $v;
+            }
+        }
+    }
+    $server_key = 'HTTP_' . strtoupper(str_replace('-', '_', $name));
+    if (isset($_SERVER[$server_key])) {
+        return $_SERVER[$server_key];
+    }
+    if (strcasecmp($name, 'Authorization') === 0) {
+        if (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) return $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+        if (isset($_SERVER['PHP_AUTH_USER'])) return $_SERVER['PHP_AUTH_USER'];
+    }
+    return '';
+}
 
-if (empty($admin_user) || empty($admin_password) || $admin_user !== $security_user || hash("sha256", $admin_password) !== $security_hash) {
+$supabase_token = '';
+$auth_header = get_auth_header('Authorization');
+if (!empty($auth_header) && preg_match('/Bearer\s+(.*)$/i', $auth_header, $matches)) {
+    $supabase_token = trim($matches[1]);
+}
+if (empty($supabase_token)) {
+    $supabase_token = get_auth_header('X-Supabase-Token');
+}
+
+$is_authenticated = false;
+$auth_identity = '';
+
+// 1. Verify via Supabase Auth Token
+if (!empty($supabase_token)) {
+    $supabase_url = get_env_var('VITE_SUPABASE_URL', 'https://xmirggkcykqqisotuyhj.supabase.co');
+    $supabase_anon = get_env_var('VITE_SUPABASE_ANON_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhtaXJnZ2tjeWtxcWlzb3R1eWhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEwMjM4NjcsImV4cCI6MjEwNjU5OTg2N30.jV9cRya7V-vuscVYFNBpUnpcEAhG5dYPej8380N2jFQ');
+
+    $token_parts = explode('.', $supabase_token);
+    if (count($token_parts) === 3) {
+        $jwt_payload = json_decode(base64_decode(str_replace(['-', '_'], ['+', '/'], $token_parts[1])), true);
+        if ($jwt_payload && isset($jwt_payload['exp']) && $jwt_payload['exp'] > (time() - 60) && isset($jwt_payload['aud']) && $jwt_payload['aud'] === 'authenticated') {
+            $auth_identity = isset($jwt_payload['email']) ? $jwt_payload['email'] : 'supabase_user';
+            
+            // If cURL is enabled on the server, verify directly with Supabase Auth endpoint
+            if (function_exists('curl_init')) {
+                $ch = curl_init(rtrim($supabase_url, '/') . '/auth/v1/user');
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    'Authorization: Bearer ' . $supabase_token,
+                    'apikey: ' . $supabase_anon
+                ]);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 6);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+                $resp = curl_exec($ch);
+                $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                if ($http_code === 200) {
+                    $userData = json_decode($resp, true);
+                    if ($userData && isset($userData['email'])) {
+                        $auth_identity = $userData['email'];
+                    }
+                    $is_authenticated = true;
+                }
+            } else {
+                $is_authenticated = true;
+            }
+        }
+    }
+}
+
+// 2. Fallback: Legacy credentials check (X-Admin-User + X-Admin-Password)
+if (!$is_authenticated) {
+    $admin_user = get_auth_header('X-Admin-User');
+    $admin_password = get_auth_header('X-Admin-Password');
+    if (!empty($admin_user) && !empty($admin_password) && $admin_user === $security_user && hash("sha256", $admin_password) === $security_hash) {
+        $is_authenticated = true;
+        $auth_identity = $admin_user;
+    }
+}
+
+if (!$is_authenticated) {
     header('HTTP/1.1 401 Unauthorized');
-    echo json_encode(["error" => "Usuario o contraseña de administrador incorrectos."]);
+    echo json_encode(["error" => "No tienes autorización. Por favor inicia sesión con tu cuenta de Supabase."]);
     exit;
 }
 
-// ─── ACTION: VERIFY PASSWORD ─────────────────────────────────────────────────
+// ─── ACTION: VERIFY PASSWORD / SESSION ───────────────────────────────────────
 if ($action === 'verify') {
-    echo json_encode(["success" => true, "message" => "Autenticado correctamente."]);
+    echo json_encode(["success" => true, "message" => "Autenticado correctamente.", "user" => $auth_identity]);
     exit;
 }
 

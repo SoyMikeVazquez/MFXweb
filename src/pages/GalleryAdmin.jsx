@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import initialImagesData from '../../public/imagenes web/imagenes/images_canonical.json';
 import initialProductionsData from '../../public/imagenes web/imagenes/productions.json';
+import { supabase } from '../lib/supabaseClient';
 
 const CATEGORIES = [
   'Character Make Up',
@@ -139,9 +140,11 @@ function GalleryAdminContent() {
   const [hasChanges, setHasChanges] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('All');
-  const [username, setUsername] = useState(() => sessionStorage.getItem('mfx_admin_username') || 'local_developer'); // Email for Hostinger API
-  const [password, setPassword] = useState(() => sessionStorage.getItem('mfx_admin_password') || 'local_mode'); // Password for Hostinger API
-  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [username, setUsername] = useState(() => sessionStorage.getItem('mfx_admin_username') || '');
+  const [password, setPassword] = useState(() => sessionStorage.getItem('mfx_admin_password') || '');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isVerifyingLogin, setIsVerifyingLogin] = useState(false);
   const [loginUserStr, setLoginUserStr] = useState('');
   const [loginPasswordInput, setLoginPasswordInput] = useState('');
@@ -151,6 +154,18 @@ function GalleryAdminContent() {
                   window.location.hostname.startsWith('192.168.') ||
                   window.location.hostname.startsWith('10.') ||
                   window.location.port === '5173';
+
+  // Helper to build authenticated headers for Supabase / Hostinger API
+  const getAuthHeaders = () => {
+    const headers = { 'Content-Type': 'application/json' };
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+      headers['X-Supabase-Token'] = session.access_token;
+    }
+    if (username) headers['X-Admin-User'] = username;
+    if (password) headers['X-Admin-Password'] = password;
+    return headers;
+  };
 
   // Notification states
   const [toast, setToast] = useState({ message: '', type: '', visible: false });
@@ -187,17 +202,78 @@ function GalleryAdminContent() {
   const editImageInputRef = useRef(null);
   const [editingItem, setEditingItem] = useState(null);
 
-  // Check sessionStorage on mount
+  // Authentication check on mount (Supabase Auth first, fallback to session storage)
   useEffect(() => {
-    const savedUser = sessionStorage.getItem('mfx_admin_username');
-    const savedPassword = sessionStorage.getItem('mfx_admin_password');
-    const savedAuth = sessionStorage.getItem('mfx_admin_authenticated');
-    if (savedAuth === 'true' && savedPassword && savedUser) {
-      setUsername(savedUser);
-      setPassword(savedPassword);
-      setIsAuthenticated(true);
+    let isMounted = true;
+
+    async function checkAuth() {
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.auth.getSession();
+          if (isMounted && data?.session && !error) {
+            setSession(data.session);
+            setIsAuthenticated(true);
+            const userEmail = data.session.user?.email || '';
+            setUsername(userEmail);
+            sessionStorage.setItem('mfx_admin_authenticated', 'true');
+            sessionStorage.setItem('mfx_admin_username', userEmail);
+            setAuthLoading(false);
+            return;
+          }
+        } catch (err) {
+          console.warn('Error al verificar sesión de Supabase:', err);
+        }
+      }
+
+      if (isLocal) {
+        const savedAuth = sessionStorage.getItem('mfx_admin_authenticated');
+        if (savedAuth === 'true') {
+          setUsername(sessionStorage.getItem('mfx_admin_username') || 'local_developer');
+          setPassword(sessionStorage.getItem('mfx_admin_password') || 'local_mode');
+          setIsAuthenticated(true);
+        }
+      } else {
+        const savedAuth = sessionStorage.getItem('mfx_admin_authenticated');
+        const savedUser = sessionStorage.getItem('mfx_admin_username');
+        const savedPass = sessionStorage.getItem('mfx_admin_password');
+        if (savedAuth === 'true' && savedUser) {
+          setUsername(savedUser);
+          if (savedPass) setPassword(savedPass);
+          setIsAuthenticated(true);
+        }
+      }
+
+      if (isMounted) {
+        setAuthLoading(false);
+      }
     }
-  }, []);
+
+    checkAuth();
+
+    let subscription = null;
+    if (supabase) {
+      const { data } = supabase.auth.onAuthStateChange((_event, newSession) => {
+        if (!isMounted) return;
+        setSession(newSession);
+        if (newSession) {
+          setIsAuthenticated(true);
+          const email = newSession.user?.email || '';
+          setUsername(email);
+          sessionStorage.setItem('mfx_admin_authenticated', 'true');
+          sessionStorage.setItem('mfx_admin_username', email);
+        } else if (!isLocal) {
+          setIsAuthenticated(false);
+          sessionStorage.removeItem('mfx_admin_authenticated');
+        }
+      });
+      subscription = data?.subscription;
+    }
+
+    return () => {
+      isMounted = false;
+      if (subscription) subscription.unsubscribe();
+    };
+  }, [isLocal]);
 
   // Initialize gallery state and sort by order
   useEffect(() => {
@@ -224,67 +300,55 @@ function GalleryAdminContent() {
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!loginUserStr || !loginPasswordInput) {
-      showToast('Por favor, ingresa el usuario y la contraseña.', 'error');
+      showToast('Por favor, ingresa tu correo y contraseña de Supabase.', 'error');
       return;
     }
 
     setIsVerifyingLogin(true);
     try {
-      if (isLocal) {
-        sessionStorage.setItem('mfx_admin_username', loginUserStr);
-        sessionStorage.setItem('mfx_admin_password', loginPasswordInput);
-        sessionStorage.setItem('mfx_admin_authenticated', 'true');
-        setUsername(loginUserStr);
-        setPassword(loginPasswordInput);
-        setIsAuthenticated(true);
-        showToast('Acceso local concedido.');
-        return;
-      }
+      if (supabase) {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: loginUserStr.trim(),
+          password: loginPasswordInput
+        });
 
-      // Production verify call
-      const response = await fetch('/api.php?action=verify', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-User': loginUserStr,
-          'X-Admin-Password': loginPasswordInput
+        if (error) {
+          throw new Error(error.message || 'Error al autenticar con Supabase.');
         }
-      });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Usuario o contraseña incorrectos.');
+        if (data?.session) {
+          setSession(data.session);
+          setIsAuthenticated(true);
+          const email = data.user?.email || loginUserStr.trim();
+          setUsername(email);
+          sessionStorage.setItem('mfx_admin_authenticated', 'true');
+          sessionStorage.setItem('mfx_admin_username', email);
+          showToast(`¡Acceso concedido! Sesión iniciada como ${email}.`);
+          return;
+        }
       }
 
-      sessionStorage.setItem('mfx_admin_username', loginUserStr);
-      sessionStorage.setItem('mfx_admin_password', loginPasswordInput);
-      sessionStorage.setItem('mfx_admin_authenticated', 'true');
-      setUsername(loginUserStr);
-      setPassword(loginPasswordInput);
-      setIsAuthenticated(true);
-      showToast('Sesión iniciada correctamente.');
+      throw new Error('No se pudo conectar con el servicio de autenticación.');
     } catch (err) {
-      console.error(err);
-      showToast(err.message, 'error');
+      console.error('Error de login:', err);
+      showToast(err.message || 'Credenciales incorrectas.', 'error');
     } finally {
       setIsVerifyingLogin(false);
     }
   };
 
-  const handleBypassLocal = () => {
-    sessionStorage.setItem('mfx_admin_username', 'local_developer');
-    sessionStorage.setItem('mfx_admin_password', 'local_mode');
-    sessionStorage.setItem('mfx_admin_authenticated', 'true');
-    setUsername('local_developer');
-    setPassword('local_mode');
-    setIsAuthenticated(true);
-    showToast('Acceso local concedido en modo desarrollo.');
-  };
-
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.warn('Error al cerrar sesión:', err);
+      }
+    }
     sessionStorage.removeItem('mfx_admin_username');
     sessionStorage.removeItem('mfx_admin_password');
     sessionStorage.removeItem('mfx_admin_authenticated');
+    setSession(null);
     setIsAuthenticated(false);
     setUsername('');
     setPassword('');
@@ -390,11 +454,7 @@ function GalleryAdminContent() {
     };
 
     const url = isLocal ? '/api/upload' : '/api.php?action=upload';
-    const headers = { 'Content-Type': 'application/json' };
-    if (!isLocal) {
-      headers['X-Admin-User'] = username;
-      headers['X-Admin-Password'] = password;
-    }
+    const headers = getAuthHeaders();
 
     const response = await fetch(url, {
       method: 'POST',
@@ -416,8 +476,8 @@ function GalleryAdminContent() {
   const handleUploadSubmit = async (e) => {
     e.preventDefault();
 
-    if (!isLocal && (!username || !password)) {
-      showToast('Por favor, introduce el usuario y contraseña de administrador para realizar cambios en producción.', 'error');
+    if (!isLocal && !session && (!username || !password)) {
+      showToast('Por favor, inicia sesión con Supabase para realizar cambios en producción.', 'error');
       return;
     }
 
@@ -451,11 +511,7 @@ function GalleryAdminContent() {
             };
 
             const url = isLocal ? '/api/upload' : '/api.php?action=upload';
-            const headers = { 'Content-Type': 'application/json' };
-            if (!isLocal) {
-              headers['X-Admin-User'] = username;
-              headers['X-Admin-Password'] = password;
-            }
+            const headers = getAuthHeaders();
 
             const response = await fetch(url, {
               method: 'POST',
@@ -578,8 +634,8 @@ function GalleryAdminContent() {
 
   // Save changes to images_canonical.json
   const handleSaveChanges = async () => {
-    if (!isLocal && (!username || !password)) {
-      showToast('Por favor, introduce el usuario y contraseña de administrador para guardar los cambios en producción.', 'error');
+    if (!isLocal && !session && (!username || !password)) {
+      showToast('Por favor, inicia sesión con Supabase para guardar los cambios en producción.', 'error');
       return;
     }
 
@@ -591,11 +647,7 @@ function GalleryAdminContent() {
       }));
 
       const url = isLocal ? '/api/gallery' : '/api.php?action=gallery';
-      const headers = { 'Content-Type': 'application/json' };
-      if (!isLocal) {
-        headers['X-Admin-User'] = username;
-        headers['X-Admin-Password'] = password;
-      }
+      const headers = getAuthHeaders();
 
       const response = await fetch(url, {
         method: 'POST',
@@ -826,11 +878,7 @@ function GalleryAdminContent() {
     });
 
     const url = isLocal ? '/api/productions' : '/api.php?action=productions';
-    const headers = { 'Content-Type': 'application/json' };
-    if (!isLocal) {
-      headers['X-Admin-User'] = username;
-      headers['X-Admin-Password'] = password;
-    }
+    const headers = getAuthHeaders();
 
     try {
       const response = await fetch(url, {
@@ -979,8 +1027,8 @@ function GalleryAdminContent() {
       showToast('Selecciona al menos una imagen.', 'error');
       return;
     }
-    if (!isLocal && (!username || !password)) {
-      showToast('Credenciales requeridas en producción.', 'error');
+    if (!isLocal && !session && (!username || !password)) {
+      showToast('Por favor, inicia sesión con Supabase para subir imágenes.', 'error');
       return;
     }
 
@@ -1010,11 +1058,7 @@ function GalleryAdminContent() {
         };
 
         const url = isLocal ? '/api/upload' : '/api.php?action=upload';
-        const headers = { 'Content-Type': 'application/json' };
-        if (!isLocal) {
-          headers['X-Admin-User'] = username;
-          headers['X-Admin-Password'] = password;
-        }
+        const headers = getAuthHeaders();
 
         const response = await fetch(url, {
           method: 'POST',
@@ -1164,6 +1208,14 @@ function GalleryAdminContent() {
     return matchesSearch && item.categories?.includes(selectedCategoryFilter);
   });
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center">
+        <Loader2 size={32} className="animate-spin text-red-700" />
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#050505] text-[#e5e5e5] flex items-center justify-center relative font-['Crimson_Text'] px-6">
@@ -1186,21 +1238,27 @@ function GalleryAdminContent() {
 
         <div className="bg-[#090909] border border-neutral-900 p-8 rounded-lg shadow-2xl max-w-md w-full relative overflow-hidden text-center">
           <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-red-950 to-transparent"></div>
-          <h2 className="text-2xl font-bold uppercase tracking-widest text-white mb-2 font-['Oswald']">MFX MEXICO</h2>
-          <p className="text-xs uppercase tracking-widest text-red-700 font-['Oswald'] mb-8">Acceso Panel de Control</p>
+          <h2 className="text-2xl font-bold uppercase tracking-widest text-white mb-1 font-['Oswald']">MFX MEXICO</h2>
+          <p className="text-xs uppercase tracking-widest text-red-700 font-['Oswald'] mb-3">Panel de Edición de Imágenes</p>
           
-          <form onSubmit={handleLogin} className="space-y-6">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-neutral-900/80 border border-neutral-800 text-[11px] text-neutral-400 font-mono mb-6">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            Acceso autenticado con Supabase
+          </div>
+          
+          <form onSubmit={handleLogin} className="space-y-5">
             <div>
               <label className="block text-xs uppercase tracking-widest text-neutral-500 font-['Oswald'] mb-2 text-left">
-                Usuario (Email)
+                Correo Electrónico (Cuenta Supabase)
               </label>
               <input
                 type="email"
                 value={loginUserStr}
                 onChange={(e) => setLoginUserStr(e.target.value)}
-                placeholder="maquillajefxmexico@gmail.com"
+                placeholder="tu-correo@ejemplo.com"
                 className="w-full bg-[#0d0d0d] border border-neutral-900 hover:border-neutral-800 focus:border-red-950 focus:outline-none p-3 text-center text-sm text-white rounded font-sans transition-colors mb-4"
                 required
+                autoComplete="email"
               />
 
               <label className="block text-xs uppercase tracking-widest text-neutral-500 font-['Oswald'] mb-2 text-left">
@@ -1213,26 +1271,18 @@ function GalleryAdminContent() {
                 placeholder="••••••••••••"
                 className="w-full bg-[#0d0d0d] border border-neutral-900 hover:border-neutral-800 focus:border-red-950 focus:outline-none p-3 text-center text-sm text-white rounded font-sans transition-colors"
                 required
+                autoComplete="current-password"
               />
             </div>
             
             <button
               type="submit"
               disabled={isVerifyingLogin}
-              className="w-full py-3 text-xs font-bold uppercase tracking-widest border border-red-950 bg-red-950/20 text-white hover:bg-red-900 hover:border-red-700 transition-all duration-500 font-['Oswald'] flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-3.5 text-xs font-bold uppercase tracking-widest border border-red-900 bg-red-950/40 text-white hover:bg-red-900 hover:border-red-700 transition-all duration-300 font-['Oswald'] flex items-center justify-center gap-2 cursor-pointer shadow-lg hover:shadow-red-900/30"
             >
-              {isVerifyingLogin ? <Loader2 size={14} className="animate-spin text-white" /> : 'INGRESAR'}
+              {isVerifyingLogin ? <Loader2 size={14} className="animate-spin text-white" /> : 'INGRESAR AL DASHBOARD'}
             </button>
           </form>
-
-          {isLocal && (
-            <button
-              onClick={handleBypassLocal}
-              className="mt-4 text-xs font-['Oswald'] text-neutral-500 hover:text-neutral-300 underline uppercase tracking-wider block mx-auto transition-colors cursor-pointer"
-            >
-              Acceder sin contraseña (Modo Local)
-            </button>
-          )}
 
           <div className="mt-8">
             <Link
@@ -1272,12 +1322,20 @@ function GalleryAdminContent() {
           <Link to="/gallery" className="pf-back text-[#555] hover:text-red-600 flex items-center gap-2 font-['Oswald'] font-bold tracking-widest text-xs">
             <ArrowLeft size={14} /> VOLVER A LA GALERÍA
           </Link>
-          <button 
-            onClick={handleLogout}
-            className="px-4 py-1.5 border border-red-950 bg-red-950/20 text-white hover:bg-red-900 hover:border-red-700 rounded transition-all duration-300 font-['Oswald'] text-xs font-bold tracking-widest cursor-pointer flex items-center gap-2"
-          >
-            <LogOut size={12} /> CERRAR SESIÓN
-          </button>
+          <div className="flex items-center gap-3">
+            {username && (
+              <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-neutral-400 font-sans border-r border-neutral-800 pr-3">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                {username}
+              </span>
+            )}
+            <button 
+              onClick={handleLogout}
+              className="px-4 py-1.5 border border-red-950 bg-red-950/20 text-white hover:bg-red-900 hover:border-red-700 rounded transition-all duration-300 font-['Oswald'] text-xs font-bold tracking-widest cursor-pointer flex items-center gap-2"
+            >
+              <LogOut size={12} /> CERRAR SESIÓN
+            </button>
+          </div>
         </div>
         <h1 className="pf-title text-4xl md:text-6xl font-black text-center mt-4">
           {activeAdminScreen === 'productions' ? 'ADMINISTRADOR DE PRODUCCIONES' : 'ADMINISTRADOR DE GALERÍA'}
@@ -2538,15 +2596,12 @@ function GalleryAdminContent() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
-          {/* Session indicator for Production (Hostinger) */}
-          {!isLocal ? (
-            <div className="flex items-center gap-2 mr-2">
-              <span className="text-[10px] text-neutral-600 font-['Oswald'] tracking-widest uppercase">Sesión activa:</span>
-              <span className="text-xs font-semibold text-neutral-300 font-sans">{username}</span>
-            </div>
-          ) : (
-            <span className="text-[10px] text-neutral-600 font-['Oswald'] tracking-widest mr-2 uppercase">Modo Local (Autoguardado)</span>
-          )}
+          {/* Session indicator */}
+          <div className="flex items-center gap-2 mr-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="text-[10px] text-neutral-500 font-['Oswald'] tracking-widest uppercase">Sesión activa:</span>
+            <span className="text-xs font-semibold text-neutral-300 font-sans">{username || 'Supabase User'}</span>
+          </div>
 
           {/* Reset button */}
           {hasChanges && (
