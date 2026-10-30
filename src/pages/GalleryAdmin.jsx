@@ -18,7 +18,8 @@ import {
   LogOut,
   Trash2,
   ImagePlus,
-  Tag
+  Tag,
+  GripVertical
 } from 'lucide-react';
 import initialImagesData from '../../public/imagenes web/imagenes/images_canonical.json';
 import { supabase } from '../lib/supabaseClient';
@@ -47,9 +48,15 @@ const CATEGORY_LABELS = {
 
 function GalleryAdminContent() {
   const [gallery, setGallery] = useState([]);
+  const [baselineGallery, setBaselineGallery] = useState([]);
   const [hasChanges, setHasChanges] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('All');
+
+  // Drag & drop para reordenar
+  const [draggedIdx, setDraggedIdx] = useState(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
+
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [username, setUsername] = useState(() => sessionStorage.getItem('mfx_admin_username') || '');
@@ -125,6 +132,8 @@ function GalleryAdminContent() {
             setIsAuthenticated(true);
             const userEmail = data.session.user?.email || '';
             setUsername(userEmail);
+            const savedPass = sessionStorage.getItem('mfx_admin_password');
+            if (savedPass) setPassword(savedPass);
             sessionStorage.setItem('mfx_admin_authenticated', 'true');
             sessionStorage.setItem('mfx_admin_username', userEmail);
             setAuthLoading(false);
@@ -172,8 +181,11 @@ function GalleryAdminContent() {
           sessionStorage.setItem('mfx_admin_authenticated', 'true');
           sessionStorage.setItem('mfx_admin_username', email);
         } else if (!isLocal) {
-          setIsAuthenticated(false);
-          sessionStorage.removeItem('mfx_admin_authenticated');
+          const savedPass = sessionStorage.getItem('mfx_admin_password');
+          if (!savedPass) {
+            setIsAuthenticated(false);
+            sessionStorage.removeItem('mfx_admin_authenticated');
+          }
         }
       });
       subscription = data?.subscription;
@@ -185,7 +197,7 @@ function GalleryAdminContent() {
     };
   }, [isLocal]);
 
-  // Initialize gallery state and sort by order
+  // Initialize gallery state and sort by order (with live server fetch)
   useEffect(() => {
     const sorted = [...initialImagesData].sort((a, b) => {
       if (a.order == null) return 1;
@@ -193,52 +205,107 @@ function GalleryAdminContent() {
       return a.order - b.order;
     });
     setGallery(sorted);
-  }, []);
+    setBaselineGallery(sorted);
 
-  // Track if there are differences from the initial data
+    // Fetch dynamic live gallery from server
+    const fetchUrl = isLocal
+      ? '/api/gallery?t=' + Date.now()
+      : '/api.php?action=get_gallery&t=' + Date.now();
+
+    fetch(fetchUrl)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          const liveSorted = [...data].sort((a, b) => {
+            if (a.order == null) return 1;
+            if (b.order == null) return -1;
+            return a.order - b.order;
+          });
+          setGallery(liveSorted);
+          setBaselineGallery(liveSorted);
+        }
+      })
+      .catch(() => {
+        fetch('/imagenes web/imagenes/images_canonical.json?t=' + Date.now())
+          .then(res => (res.ok ? res.json() : null))
+          .then(data => {
+            if (Array.isArray(data) && data.length > 0) {
+              const liveSorted = [...data].sort((a, b) => {
+                if (a.order == null) return 1;
+                if (b.order == null) return -1;
+                return a.order - b.order;
+              });
+              setGallery(liveSorted);
+              setBaselineGallery(liveSorted);
+            }
+          })
+          .catch(() => {});
+      });
+  }, [isLocal]);
+
+  // Track if there are differences from baseline persisted data
   useEffect(() => {
-    const initialSorted = [...initialImagesData].sort((a, b) => {
-      if (a.order == null) return 1;
-      if (b.order == null) return -1;
-      return a.order - b.order;
-    });
-    
-    const isDifferent = JSON.stringify(gallery) !== JSON.stringify(initialSorted);
+    if (baselineGallery.length === 0) return;
+    const isDifferent = JSON.stringify(gallery) !== JSON.stringify(baselineGallery);
     setHasChanges(isDifferent);
-  }, [gallery]);
+  }, [gallery, baselineGallery]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!loginUserStr || !loginPasswordInput) {
-      showToast('Por favor, ingresa tu correo y contraseña de Supabase.', 'error');
+      showToast('Por favor, ingresa tu correo y contraseña.', 'error');
       return;
     }
 
     setIsVerifyingLogin(true);
+    const cleanEmail = loginUserStr.trim();
+
     try {
       if (supabase) {
         const { data, error } = await supabase.auth.signInWithPassword({
-          email: loginUserStr.trim(),
+          email: cleanEmail,
           password: loginPasswordInput
         });
 
-        if (error) {
-          throw new Error(error.message || 'Error al autenticar con Supabase.');
-        }
-
-        if (data?.session) {
+        if (!error && data?.session) {
           setSession(data.session);
           setIsAuthenticated(true);
-          const email = data.user?.email || loginUserStr.trim();
+          const email = data.user?.email || cleanEmail;
           setUsername(email);
+          setPassword(loginPasswordInput);
           sessionStorage.setItem('mfx_admin_authenticated', 'true');
           sessionStorage.setItem('mfx_admin_username', email);
+          sessionStorage.setItem('mfx_admin_password', loginPasswordInput);
           showToast(`¡Acceso concedido! Sesión iniciada como ${email}.`);
+          setIsVerifyingLogin(false);
           return;
         }
       }
 
-      throw new Error('No se pudo conectar con el servicio de autenticación.');
+      // Fallback for production server API authentication
+      if (!isLocal) {
+        const response = await fetch('/api.php?action=verify', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Admin-User': cleanEmail,
+            'X-Admin-Password': loginPasswordInput
+          }
+        });
+        if (response.ok) {
+          setUsername(cleanEmail);
+          setPassword(loginPasswordInput);
+          setIsAuthenticated(true);
+          sessionStorage.setItem('mfx_admin_authenticated', 'true');
+          sessionStorage.setItem('mfx_admin_username', cleanEmail);
+          sessionStorage.setItem('mfx_admin_password', loginPasswordInput);
+          showToast('Sesión iniciada correctamente.');
+          setIsVerifyingLogin(false);
+          return;
+        }
+      }
+
+      throw new Error('Credenciales incorrectas. Verifica tu correo y contraseña.');
     } catch (err) {
       console.error('Error de login:', err);
       showToast(err.message || 'Credenciales incorrectas.', 'error');
@@ -545,7 +612,7 @@ function GalleryAdminContent() {
   // Save changes to images_canonical.json
   const handleSaveChanges = async () => {
     if (!isLocal && !session && (!username || !password)) {
-      showToast('Por favor, inicia sesión con Supabase para guardar los cambios en producción.', 'error');
+      showToast('Por favor, inicia sesión para guardar los cambios en producción.', 'error');
       return;
     }
 
@@ -574,7 +641,9 @@ function GalleryAdminContent() {
       if (resData.error) throw new Error(resData.error);
 
       setGallery(normalized);
-      showToast('Los cambios se guardaron con éxito.');
+      setBaselineGallery(normalized);
+      setHasChanges(false);
+      showToast('Los cambios se guardaron con éxito en la galería.');
     } catch (err) {
       console.error(err);
       showToast(`Error al guardar cambios: ${err.message}`, 'error');
@@ -586,14 +655,58 @@ function GalleryAdminContent() {
   // Reset gallery to disk state
   const handleResetChanges = () => {
     if (window.confirm('¿Estás seguro de que deseas descartar todos los cambios no guardados?')) {
-      const sorted = [...initialImagesData].sort((a, b) => {
-        if (a.order == null) return 1;
-        if (b.order == null) return -1;
-        return a.order - b.order;
-      });
-      setGallery(sorted);
+      setGallery([...baselineGallery]);
       showToast('Cambios descartados.');
     }
+  };
+
+  // Drag & drop handlers para reordenar arrastrando
+  const handleDragStart = (idx) => {
+    setDraggedIdx(idx);
+  };
+
+  const handleDragOver = (e, idx) => {
+    e.preventDefault();
+    if (dragOverIdx !== idx) {
+      setDragOverIdx(idx);
+    }
+  };
+
+  const handleDrop = (targetFilteredIdx) => {
+    if (draggedIdx === null || draggedIdx === targetFilteredIdx) {
+      setDraggedIdx(null);
+      setDragOverIdx(null);
+      return;
+    }
+
+    const itemMoved = filteredItems[draggedIdx];
+    const itemTarget = filteredItems[targetFilteredIdx];
+    if (!itemMoved || !itemTarget) {
+      setDraggedIdx(null);
+      setDragOverIdx(null);
+      return;
+    }
+
+    const fullIndexMoved = gallery.findIndex(g => g.filename === itemMoved.filename);
+    const fullIndexTarget = gallery.findIndex(g => g.filename === itemTarget.filename);
+    if (fullIndexMoved === -1 || fullIndexTarget === -1) {
+      setDraggedIdx(null);
+      setDragOverIdx(null);
+      return;
+    }
+
+    const updatedGallery = [...gallery];
+    const [removed] = updatedGallery.splice(fullIndexMoved, 1);
+    updatedGallery.splice(fullIndexTarget, 0, removed);
+
+    const reordered = updatedGallery.map((item, idx) => ({
+      ...item,
+      order: idx + 1
+    }));
+
+    setGallery(reordered);
+    setDraggedIdx(null);
+    setDragOverIdx(null);
   };
 
 
@@ -1299,8 +1412,8 @@ function GalleryAdminContent() {
 
             {/* List Header */}
             <div className="text-xs uppercase tracking-widest text-neutral-500 font-['Oswald'] flex items-center px-4 py-2 border-b border-neutral-900 bg-neutral-950/20 mb-2">
-              <div className="w-12 text-center">Orden</div>
-              <div className="w-16 ml-4">Miniatura</div>
+              <div className="w-20 text-left pl-1">Orden</div>
+              <div className="w-16 ml-2">Miniatura</div>
               <div className="flex-grow ml-6">Detalles de la Imagen / Video</div>
               <div className="w-32 text-right">Controles de Orden</div>
             </div>
@@ -1315,24 +1428,44 @@ function GalleryAdminContent() {
                 filteredItems.map((item, idx) => {
                   // Find index in main gallery list
                   const fullIndex = gallery.findIndex(g => g.filename === item.filename);
+                  const isDraggingOver = dragOverIdx === idx;
                   
                   return (
                     <article 
                       key={item.filename}
-                      className={`bg-[#0b0b0b] hover:bg-[#0e0e0e] border border-neutral-950 hover:border-neutral-900/60 p-4 rounded flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all duration-300 ${
+                      draggable={true}
+                      onDragStart={() => handleDragStart(idx)}
+                      onDragOver={(e) => handleDragOver(e, idx)}
+                      onDrop={() => handleDrop(idx)}
+                      onDragEnd={() => {
+                        setDraggedIdx(null);
+                        setDragOverIdx(null);
+                      }}
+                      className={`p-4 rounded flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all duration-300 border ${
+                        isDraggingOver
+                          ? 'border-red-600 bg-red-950/25 shadow-lg'
+                          : 'bg-[#0b0b0b] hover:bg-[#0e0e0e] border-neutral-950 hover:border-neutral-900/60'
+                      } ${
                         item.hidden ? 'opacity-40 border-dashed border-red-950/40 bg-black/40' : ''
                       }`}
                     >
-                      {/* Order Input */}
-                      <div className="flex items-center gap-1 w-full sm:w-auto">
-                        <span className="text-xs font-['Oswald'] text-neutral-500 uppercase mr-2 sm:hidden">Orden:</span>
+                      {/* Order Input & Drag Handle */}
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <span
+                          className="text-neutral-600 hover:text-white cursor-grab active:cursor-grabbing p-1 shrink-0"
+                          title="Arrastrar para mover posición"
+                        >
+                          <GripVertical size={16} />
+                        </span>
+                        <span className="text-xs font-['Oswald'] text-neutral-500 uppercase mr-1 sm:hidden">Orden:</span>
                         <input 
                           type="number"
                           value={fullIndex + 1}
                           onChange={(e) => handleOrderChange(item, e.target.value)}
-                          className="w-12 bg-black border border-neutral-900 text-center py-1.5 text-xs text-white rounded font-sans focus:outline-none focus:border-red-950 font-bold"
+                          className="w-12 bg-black border border-neutral-900 text-center py-1.5 text-xs text-white rounded font-sans focus:outline-none focus:border-red-950 font-bold shrink-0"
                           min="1"
                           max={gallery.length}
+                          title="Escribe un número para mover de posición directamente"
                         />
                         <span className="text-[10px] text-neutral-600 sm:hidden">de {gallery.length}</span>
                       </div>

@@ -9,6 +9,23 @@ function galleryAdminPlugin(env = {}) {
     name: 'gallery-admin-plugin',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
+        // Handle reading images_canonical.json
+        if (req.method === 'GET' && req.url.startsWith('/api/gallery')) {
+          try {
+            const targetPath = './public/imagenes web/imagenes/images_canonical.json';
+            let data = [];
+            if (fs.existsSync(targetPath)) {
+              data = JSON.parse(fs.readFileSync(targetPath, 'utf-8'));
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(data));
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+          }
+          return;
+        }
+
         // Handle saving the full images_canonical.json
         if (req.method === 'POST' && req.url === '/api/gallery') {
           try {

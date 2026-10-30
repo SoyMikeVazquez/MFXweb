@@ -450,6 +450,10 @@ export default function PortfolioPage() {
     return Array.isArray(productionsData) ? productionsData : [];
   });
 
+  const [galleryImages, setGalleryImages] = useState(() => {
+    return Array.isArray(imagesData) ? imagesData : [];
+  });
+
   useEffect(() => {
     const fetchUrl = isLocal
       ? '/api/productions?t=' + Date.now()
@@ -467,6 +471,24 @@ export default function PortfolioPage() {
           })
           .catch(() => {});
       });
+
+    // Fetch dynamic live gallery canonical images
+    const galleryUrl = isLocal
+      ? '/api/gallery?t=' + Date.now()
+      : '/api.php?action=get_gallery&t=' + Date.now();
+    fetch(galleryUrl)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) setGalleryImages(data);
+      })
+      .catch(() => {
+        fetch('/imagenes web/imagenes/images_canonical.json?t=' + Date.now())
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (Array.isArray(data) && data.length > 0) setGalleryImages(data);
+          })
+          .catch(() => {});
+      });
   }, [isLocal]);
 
   const currentProdObj = useMemo(() => {
@@ -475,8 +497,8 @@ export default function PortfolioPage() {
   }, [filterMode, displayCategory, prodsData]);
 
   const filtered = useMemo(
-    () => prepareImages(imagesData, prodsData, displayCategory, filterMode, subCategory),
-    [displayCategory, filterMode, subCategory, prodsData]
+    () => prepareImages(galleryImages, prodsData, displayCategory, filterMode, subCategory),
+    [displayCategory, filterMode, subCategory, prodsData, galleryImages]
   );
 
   // Fetch views on mount
