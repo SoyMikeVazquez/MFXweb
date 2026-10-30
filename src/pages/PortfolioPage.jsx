@@ -65,13 +65,9 @@ function extractProductionImages(prod) {
 function prepareImages(portfolioImages, productionsList, category, filterMode = 'category', subCategory = 'All') {
   if (filterMode === 'production') {
     let prodImages = [];
-    if (category === 'All') {
-      const sortedProds = [...(productionsList || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-      let gOrder = 1;
-      prodImages = sortedProds.flatMap((p) => {
-        const imgs = extractProductionImages(p);
-        return imgs.map((im) => ({ ...im, order: gOrder++ }));
-      });
+    if (!category || category === 'All') {
+      const activeP = (productionsList || [])[0];
+      prodImages = extractProductionImages(activeP);
     } else {
       const activeP = (productionsList || []).find((p) => (typeof p === 'string' ? p : p?.name) === category);
       prodImages = extractProductionImages(activeP);
@@ -440,10 +436,19 @@ function Lightbox({ images, index, views, onClose, onPrev, onNext }) {
 /* ─── Main page ───────────────────────────────────────────────────────────── */
 export default function PortfolioPage() {
   const [searchParams] = useSearchParams();
-  const initialCategory = searchParams.get('category') || 'All';
-  const validInitial = CATEGORY_ORDER.includes(initialCategory) ? initialCategory : 'All';
+  const rawCategory = searchParams.get('category');
+  const rawMode = searchParams.get('mode');
 
-  const [filterMode, setFilterMode] = useState('category'); // 'category' | 'production'
+  const initialProds = Array.isArray(productionsData) ? productionsData : [];
+  const isProdCategory = rawCategory && initialProds.some(p => (typeof p === 'string' ? p : p?.name) === rawCategory);
+  const initialMode = rawMode === 'production' || isProdCategory ? 'production' : 'category';
+
+  const firstProdName = initialProds.length > 0 ? (typeof initialProds[0] === 'string' ? initialProds[0] : initialProds[0]?.name || '') : '';
+  const validInitial = initialMode === 'production'
+    ? (isProdCategory ? rawCategory : firstProdName)
+    : (CATEGORY_ORDER.includes(rawCategory) ? rawCategory : 'All');
+
+  const [filterMode, setFilterMode] = useState(initialMode); // 'category' | 'production'
   const [activeCategory, setActiveCategory] = useState(validInitial);
   const [displayCategory, setDisplayCategory] = useState(validInitial);
   const [subCategory, setSubCategory] = useState('All');
@@ -499,9 +504,27 @@ export default function PortfolioPage() {
   }, [isLocal]);
 
   const currentProdObj = useMemo(() => {
-    if (filterMode !== 'production' || displayCategory === 'All') return null;
-    return prodsData.find((p) => (typeof p === 'string' ? p : p?.name) === displayCategory) || null;
+    if (filterMode !== 'production') return null;
+    return (
+      prodsData.find((p) => (typeof p === 'string' ? p : p?.name) === displayCategory) ||
+      prodsData[0] ||
+      null
+    );
   }, [filterMode, displayCategory, prodsData]);
+
+  // When in production mode, ensure we default to the first production instead of 'All'
+  useEffect(() => {
+    if (filterMode === 'production' && prodsData.length > 0) {
+      const exists = prodsData.some((p) => (typeof p === 'string' ? p : p?.name) === activeCategory);
+      if (!exists || activeCategory === 'All') {
+        const first = typeof prodsData[0] === 'string' ? prodsData[0] : prodsData[0]?.name || '';
+        if (first) {
+          setActiveCategory(first);
+          setDisplayCategory(first);
+        }
+      }
+    }
+  }, [filterMode, prodsData, activeCategory]);
 
   const filtered = useMemo(
     () => prepareImages(galleryImages, prodsData, displayCategory, filterMode, subCategory),
@@ -602,7 +625,13 @@ export default function PortfolioPage() {
           Categorías
         </button>
         <button 
-          onClick={() => { setFilterMode('production'); handleCategory('All'); }} 
+          onClick={() => { 
+            setFilterMode('production'); 
+            const first = prodsData.length > 0 ? (typeof prodsData[0] === 'string' ? prodsData[0] : prodsData[0]?.name || '') : '';
+            if (first) {
+              handleCategory(first);
+            }
+          }} 
           className={`text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] font-['Oswald'] transition-all duration-300 ${filterMode === 'production' ? 'text-red-700' : 'text-neutral-600 hover:text-neutral-300'}`}
         >
           Producciones
@@ -623,32 +652,24 @@ export default function PortfolioPage() {
               </button>
             ))
           ) : (
-            <>
-              <button
-                onClick={() => handleCategory('All')}
-                className={`pf-filter-btn ${activeCategory === 'All' ? 'pf-filter-btn--on' : ''}`}
-              >
-                TODAS
-              </button>
-              {prodsData.map((prod) => {
-                const prodName = typeof prod === 'string' ? prod : prod?.name || '';
-                return (
-                  <button
-                    key={prodName}
-                    onClick={() => handleCategory(prodName)}
-                    className={`pf-filter-btn ${activeCategory === prodName ? 'pf-filter-btn--on' : ''}`}
-                  >
-                    {prodName.toUpperCase()}
-                  </button>
-                );
-              })}
-            </>
+            prodsData.map((prod) => {
+              const prodName = typeof prod === 'string' ? prod : prod?.name || '';
+              return (
+                <button
+                  key={prodName}
+                  onClick={() => handleCategory(prodName)}
+                  className={`pf-filter-btn ${activeCategory === prodName ? 'pf-filter-btn--on' : ''}`}
+                >
+                  {prodName.toUpperCase()}
+                </button>
+              );
+            })
           )}
         </div>
       </nav>
 
       {/* ── Órdenes (Subcarpetas) Bar for Active Production ─────────────────────── */}
-      {filterMode === 'production' && displayCategory !== 'All' && ((currentProdObj?.orders?.length > 0) || (currentProdObj?.folders?.length > 0) || (currentProdObj?.categories?.length > 0)) && (
+      {filterMode === 'production' && ((currentProdObj?.orders?.length > 0) || (currentProdObj?.folders?.length > 0) || (currentProdObj?.categories?.length > 0)) && (
         <div className="bg-[#080808] border-b border-neutral-900 py-2.5 px-6 flex items-center justify-center gap-2 flex-wrap">
           <span className="text-[10px] uppercase font-['Oswald'] text-neutral-500 tracking-widest mr-2 flex items-center gap-1.5">
             <Folder size={12} className="text-red-700" /> Órdenes:
