@@ -1,23 +1,42 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Play } from 'lucide-react';
 import { useLanguage } from '../LanguageContext';
 
-const VideoThumbnail = ({ videoId, title }) => {
+const VideoThumbnail = ({ video }) => {
     const [isPlaying, setIsPlaying] = useState(false);
+    const videoRef = useRef(null);
+
+    const isLocal = Boolean(video.src);
+
+    const handlePlay = () => {
+        setIsPlaying(true);
+        if (isLocal && videoRef.current) {
+            videoRef.current.play?.().catch(() => {});
+        }
+    };
 
     return (
         <div className="relative w-full aspect-video bg-neutral-900 border border-neutral-800 rounded-sm overflow-hidden group cursor-pointer hover:border-red-900/50 transition-colors duration-500">
             {!isPlaying ? (
                 <div 
                     className="absolute inset-0 flex items-center justify-center"
-                    onClick={() => setIsPlaying(true)}
+                    onClick={handlePlay}
                 >
-                    {/* Thumbnail Image */}
-                    <img 
-                        src={`https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`} 
-                        alt={title}
-                        className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-700"
-                    />
+                    {isLocal ? (
+                        <video 
+                            src={`${video.src}#t=0.5`}
+                            preload="metadata"
+                            muted
+                            playsInline
+                            className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-700 pointer-events-none"
+                        />
+                    ) : (
+                        <img 
+                            src={`https://img.youtube.com/vi/${video.id}/maxresdefault.jpg`} 
+                            alt={video.title}
+                            className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-700"
+                        />
+                    )}
                     {/* Dark overlay */}
                     <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-colors duration-500"></div>
                     
@@ -26,10 +45,19 @@ const VideoThumbnail = ({ videoId, title }) => {
                         <Play size={24} className="ml-1" fill="currentColor" />
                     </div>
                 </div>
+            ) : isLocal ? (
+                <video
+                    ref={videoRef}
+                    src={video.src}
+                    controls
+                    autoPlay
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-contain bg-black"
+                />
             ) : (
                 <iframe
-                    src={`https://www.youtube.com/embed/${videoId}?autoplay=1&modestbranding=1&rel=0`}
-                    title={title}
+                    src={`https://www.youtube.com/embed/${video.id}?autoplay=1&modestbranding=1&rel=0`}
+                    title={video.title}
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
                     className="absolute inset-0 w-full h-full border-0"
@@ -43,8 +71,18 @@ const Interviews = () => {
     const { t } = useLanguage();
 
     const videos = [
-        { id: '2dVusOUtkvg', title: 'Interview 1' },
-        { id: '9s82gJGASxc', title: 'Interview 2' },
+        { 
+            src: '/VideoEntrevista/entrevista.mp4', 
+            title: 'Entrevista MFX' 
+        },
+        { 
+            id: '2dVusOUtkvg', 
+            title: 'Interview 1' 
+        },
+        { 
+            id: '9s82gJGASxc', 
+            title: 'Interview 2' 
+        },
     ];
 
     return (
@@ -61,10 +99,10 @@ const Interviews = () => {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
                     {videos.map((video, index) => (
                         <div key={index} className="flex flex-col">
-                            <VideoThumbnail videoId={video.id} title={video.title} />
+                            <VideoThumbnail video={video} />
                         </div>
                     ))}
                 </div>
