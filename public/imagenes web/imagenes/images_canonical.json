@@ -98,7 +98,7 @@
       "Character Make Up"
     ],
     "order": 11,
-    "hidden": false
+    "hidden": true
   },
   {
     "src_url": "https://maquillajefxmexico.com/wp-content/uploads/2024/01/fotos-cuadradas-5-300x300.jpg",
@@ -115,7 +115,8 @@
     "categories": [
       "Old Age"
     ],
-    "order": 13
+    "order": 13,
+    "hidden": true
   },
   {
     "src_url": "/imagenes web/imagenes/Geechee_makeup_test_film_2020.jpg",
@@ -574,7 +575,8 @@
     "categories": [
       "Horror Fantasy"
     ],
-    "order": 63
+    "order": 63,
+    "hidden": true
   },
   {
     "src_url": "/imagenes web/imagenes/Tv_commercial_2016.jpeg",
@@ -1436,7 +1438,8 @@
     "categories": [
       "Puppets"
     ],
-    "order": 159
+    "order": 159,
+    "hidden": true
   },
   {
     "src_url": "https://maquillajefxmexico.com/wp-content/uploads/2024/01/cropped-LOGO-BLANCO-4-178x45.png",
@@ -1835,7 +1838,7 @@
       "Blood Wounds"
     ],
     "order": 201,
-    "hidden": false
+    "hidden": true
   },
   {
     "src_url": "/imagenes web/imagenes/Apocalypto_film_2007.jpg",
