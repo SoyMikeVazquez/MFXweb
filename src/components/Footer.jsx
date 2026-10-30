@@ -26,29 +26,17 @@ const Footer = () => {
                             {t('footer', 'aboutText')}
                         </p>
 
-                        <div className="flex flex-wrap items-center gap-4">
+                        <div>
                             <a href="https://maquillajefxmexico.com/privacy-policy/" target="_blank" rel="noopener noreferrer" className="inline-block text-white font-bold text-xs uppercase tracking-widest border-b border-white pb-1 hover:text-neutral-300 hover:border-neutral-300 transition-colors">
                                 {t('footer', 'privacy')}
                             </a>
-                            <Link 
-                                to="/admin" 
-                                className="px-5 py-2.5 bg-white text-black font-bold text-xs uppercase tracking-widest hover:bg-neutral-200 transition-all duration-300 font-['Oswald'] inline-block text-center"
-                            >
-                                Acceso
-                            </Link>
-                            <Link 
-                                to="/producciones-admin" 
-                                className="px-5 py-2.5 bg-red-950/80 text-white border border-red-800 font-bold text-xs uppercase tracking-widest hover:bg-red-900 transition-all duration-300 font-['Oswald'] inline-block text-center"
-                            >
-                                Producciones
-                            </Link>
                         </div>
                     </div>
 
                     {/* Right Column: CONTACT & FOLLOW */}
                     <div className="w-full md:w-1/2 flex flex-col items-start md:items-start">
                         {/* CONTACT US */}
-                        <div className="mb-12">
+                        <div className="mb-10">
                             <h3 className="text-white font-bold uppercase tracking-widest text-sm mb-6 pb-2 border-b border-neutral-800 w-fit">
                                 {t('footer', 'contact')}
                             </h3>
@@ -58,6 +46,23 @@ const Footer = () => {
                             <p className="text-neutral-400 text-sm">
                                 +525533428081
                             </p>
+                        </div>
+
+                        {/* ACCESO Y PRODUCCIONES DISCRETOS (ARRIBA DE REDES SOCIALES) */}
+                        <div className="flex items-center gap-3 mb-6">
+                            <Link 
+                                to="/admin" 
+                                className="text-neutral-500 hover:text-neutral-300 text-xs font-['Oswald'] uppercase tracking-widest transition-colors duration-300"
+                            >
+                                Acceso
+                            </Link>
+                            <span className="text-neutral-700 text-xs select-none">•</span>
+                            <Link 
+                                to="/producciones-admin" 
+                                className="text-neutral-500 hover:text-neutral-300 text-xs font-['Oswald'] uppercase tracking-widest transition-colors duration-300"
+                            >
+                                Producciones
+                            </Link>
                         </div>
 
                         {/* FOLLOW US */}

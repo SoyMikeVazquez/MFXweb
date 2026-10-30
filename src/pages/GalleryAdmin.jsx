@@ -119,7 +119,7 @@ function GalleryAdminContent() {
   const editImageInputRef = useRef(null);
   const [editingItem, setEditingItem] = useState(null);
 
-  // Authentication check on mount (Supabase Auth first, fallback to session storage)
+  // Authentication check on mount (Requiere estrictamente Supabase Auth)
   useEffect(() => {
     let isMounted = true;
 
@@ -144,25 +144,10 @@ function GalleryAdminContent() {
         }
       }
 
-      if (isLocal) {
-        const savedAuth = sessionStorage.getItem('mfx_admin_authenticated');
-        if (savedAuth === 'true') {
-          setUsername(sessionStorage.getItem('mfx_admin_username') || 'local_developer');
-          setPassword(sessionStorage.getItem('mfx_admin_password') || 'local_mode');
-          setIsAuthenticated(true);
-        }
-      } else {
-        const savedAuth = sessionStorage.getItem('mfx_admin_authenticated');
-        const savedUser = sessionStorage.getItem('mfx_admin_username');
-        const savedPass = sessionStorage.getItem('mfx_admin_password');
-        if (savedAuth === 'true' && savedUser) {
-          setUsername(savedUser);
-          if (savedPass) setPassword(savedPass);
-          setIsAuthenticated(true);
-        }
-      }
-
+      // Sin sesión activa de Supabase: se exige inicio de sesión
       if (isMounted) {
+        setIsAuthenticated(false);
+        setSession(null);
         setAuthLoading(false);
       }
     }
@@ -180,12 +165,11 @@ function GalleryAdminContent() {
           setUsername(email);
           sessionStorage.setItem('mfx_admin_authenticated', 'true');
           sessionStorage.setItem('mfx_admin_username', email);
-        } else if (!isLocal) {
-          const savedPass = sessionStorage.getItem('mfx_admin_password');
-          if (!savedPass) {
-            setIsAuthenticated(false);
-            sessionStorage.removeItem('mfx_admin_authenticated');
-          }
+        } else {
+          setIsAuthenticated(false);
+          sessionStorage.removeItem('mfx_admin_authenticated');
+          sessionStorage.removeItem('mfx_admin_username');
+          sessionStorage.removeItem('mfx_admin_password');
         }
       });
       subscription = data?.subscription;
@@ -195,7 +179,7 @@ function GalleryAdminContent() {
       isMounted = false;
       if (subscription) subscription.unsubscribe();
     };
-  }, [isLocal]);
+  }, []);
 
   // Initialize gallery state and sort by order (with live server fetch)
   useEffect(() => {

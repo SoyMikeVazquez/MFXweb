@@ -262,7 +262,7 @@ function ProductionsAdminContent() {
     }, 4000);
   };
 
-  // Verificar sesión al montar
+  // Verificar sesión al montar (requiere estrictamente autenticación con Supabase)
   useEffect(() => {
     let isMounted = true;
 
@@ -275,6 +275,8 @@ function ProductionsAdminContent() {
             setIsAuthenticated(true);
             const userEmail = data.session.user?.email || '';
             setUsername(userEmail);
+            const savedPass = sessionStorage.getItem('mfx_admin_password');
+            if (savedPass) setPassword(savedPass);
             sessionStorage.setItem('mfx_admin_authenticated', 'true');
             sessionStorage.setItem('mfx_admin_username', userEmail);
             setAuthLoading(false);
@@ -285,13 +287,12 @@ function ProductionsAdminContent() {
         }
       }
 
-      const savedAuth = sessionStorage.getItem('mfx_admin_authenticated');
-      if (savedAuth === 'true') {
-        setUsername(sessionStorage.getItem('mfx_admin_username') || (isLocal ? 'local_developer' : ''));
-        setPassword(sessionStorage.getItem('mfx_admin_password') || (isLocal ? 'local_mode' : ''));
-        setIsAuthenticated(true);
+      // Sin sesión activa de Supabase: se exige inicio de sesión
+      if (isMounted) {
+        setIsAuthenticated(false);
+        setSession(null);
+        setAuthLoading(false);
       }
-      if (isMounted) setAuthLoading(false);
     }
 
     checkAuth();
@@ -307,6 +308,11 @@ function ProductionsAdminContent() {
           setUsername(email);
           sessionStorage.setItem('mfx_admin_authenticated', 'true');
           sessionStorage.setItem('mfx_admin_username', email);
+        } else {
+          setIsAuthenticated(false);
+          sessionStorage.removeItem('mfx_admin_authenticated');
+          sessionStorage.removeItem('mfx_admin_username');
+          sessionStorage.removeItem('mfx_admin_password');
         }
       });
       subscription = listener?.subscription;
@@ -316,7 +322,7 @@ function ProductionsAdminContent() {
       isMounted = false;
       subscription?.unsubscribe?.();
     };
-  }, [isLocal]);
+  }, []);
 
   // Cargar producciones frescas desde el servidor al montar
   useEffect(() => {
@@ -419,14 +425,6 @@ function ProductionsAdminContent() {
     } finally {
       setIsVerifyingLogin(false);
     }
-  };
-
-  const handleBypassLocal = () => {
-    setIsAuthenticated(true);
-    setUsername('local_developer');
-    sessionStorage.setItem('mfx_admin_authenticated', 'true');
-    sessionStorage.setItem('mfx_admin_username', 'local_developer');
-    showToast('Acceso local concedido.');
   };
 
   const handleLogout = async () => {
@@ -1098,15 +1096,6 @@ function ProductionsAdminContent() {
               )}
             </button>
           </form>
-
-          {isLocal && (
-            <button
-              onClick={handleBypassLocal}
-              className="mt-4 text-xs font-['Oswald'] text-neutral-500 hover:text-neutral-300 underline uppercase tracking-wider block mx-auto transition-colors cursor-pointer"
-            >
-              Acceder sin contraseña (Modo Local)
-            </button>
-          )}
 
           <div className="mt-8 flex items-center justify-center gap-6">
             <Link
