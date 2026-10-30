@@ -34,24 +34,46 @@ const CATEGORY_LABELS = {
 };
 
 /* ─── Prepare & filter images ─────────────────────────────────────────────── */
+function extractProductionImages(prod) {
+  if (!prod || typeof prod === 'string') return [];
+  const pName = prod.name || '';
+  if (Array.isArray(prod.orders) && prod.orders.length > 0) {
+    let globalOrder = 1;
+    return prod.orders.flatMap((ord) => {
+      const ordName = typeof ord === 'string' ? ord : ord?.name || '';
+      const imgs = Array.isArray(ord?.images) ? ord.images : [];
+      return imgs.map((img) => ({
+        ...img,
+        hover_caption: img.hover_caption || `${pName} - ${ordName}`,
+        folder: ordName,
+        productionName: pName,
+        order: globalOrder++
+      }));
+    });
+  }
+  const list = Array.isArray(prod.images) ? prod.images : [];
+  return list.map((img, i) => ({
+    ...img,
+    hover_caption: img.hover_caption || pName,
+    productionName: pName,
+    order: img.order ?? i + 1
+  }));
+}
+
 function prepareImages(portfolioImages, productionsList, category, filterMode = 'category', subCategory = 'All') {
   if (filterMode === 'production') {
     let prodImages = [];
     if (category === 'All') {
-      prodImages = (productionsList || []).flatMap((p) => {
-        const pName = typeof p === 'string' ? p : p?.name || '';
-        const list = Array.isArray(p?.images) ? p.images : [];
-        return list.map((img) => ({ ...img, productionName: pName }));
-      });
+      prodImages = (productionsList || []).flatMap((p) => extractProductionImages(p));
     } else {
       const activeP = (productionsList || []).find((p) => (typeof p === 'string' ? p : p?.name) === category);
-      prodImages = (activeP?.images || []).map((img) => ({ ...img, productionName: category }));
+      prodImages = extractProductionImages(activeP);
     }
 
     return prodImages
       .filter((img) => {
         if (img.hidden === true) return false;
-        if (!img.src_url || !img.hover_caption) return false;
+        if (!img.src_url && !img.filename) return false;
         if (subCategory && subCategory !== 'All') {
           return img.folder === subCategory || (img.categories || []).includes(subCategory);
         }
@@ -429,13 +451,23 @@ export default function PortfolioPage() {
   });
 
   useEffect(() => {
-    fetch('/imagenes web/imagenes/productions.json?t=' + Date.now())
+    const fetchUrl = isLocal
+      ? '/api/productions?t=' + Date.now()
+      : '/api.php?action=get_productions&t=' + Date.now();
+    fetch(fetchUrl)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (Array.isArray(data)) setProdsData(data);
       })
-      .catch(() => {});
-  }, []);
+      .catch(() => {
+        fetch('/imagenes web/imagenes/productions.json?t=' + Date.now())
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (Array.isArray(data)) setProdsData(data);
+          })
+          .catch(() => {});
+      });
+  }, [isLocal]);
 
   const currentProdObj = useMemo(() => {
     if (filterMode !== 'production' || displayCategory === 'All') return null;
@@ -586,11 +618,11 @@ export default function PortfolioPage() {
         </div>
       </nav>
 
-      {/* ── Carpetas Bar for Active Production ─────────────────────── */}
-      {filterMode === 'production' && displayCategory !== 'All' && ((currentProdObj?.folders?.length > 0) || (currentProdObj?.categories?.length > 0)) && (
+      {/* ── Órdenes (Subcarpetas) Bar for Active Production ─────────────────────── */}
+      {filterMode === 'production' && displayCategory !== 'All' && ((currentProdObj?.orders?.length > 0) || (currentProdObj?.folders?.length > 0) || (currentProdObj?.categories?.length > 0)) && (
         <div className="bg-[#080808] border-b border-neutral-900 py-2.5 px-6 flex items-center justify-center gap-2 flex-wrap">
           <span className="text-[10px] uppercase font-['Oswald'] text-neutral-500 tracking-widest mr-2 flex items-center gap-1.5">
-            <Folder size={12} className="text-red-700" /> Carpetas:
+            <Folder size={12} className="text-red-700" /> Órdenes:
           </span>
           <button
             onClick={() => setSubCategory('All')}
@@ -602,7 +634,10 @@ export default function PortfolioPage() {
           >
             Todas
           </button>
-          {(currentProdObj.folders || currentProdObj.categories || []).map((c) => (
+          {(Array.isArray(currentProdObj.orders)
+            ? currentProdObj.orders.map(o => (typeof o === 'string' ? o : o.name))
+            : (currentProdObj.folders || currentProdObj.categories || [])
+          ).map((c) => (
             <button
               key={c}
               onClick={() => setSubCategory(c)}
@@ -657,12 +692,20 @@ export default function PortfolioPage() {
       {/* ── Footer ──────────────────────────────────────────────────────── */}
       <footer className="pf-footer flex flex-col sm:flex-row items-center justify-center gap-4">
         <p style={{ color: 'white' }}>© {new Date().getFullYear()} MFX Mexico — Todos los derechos reservados</p>
-        <Link 
-          to="/admin" 
-          className="px-5 py-2.5 bg-white text-black font-bold text-xs uppercase tracking-widest hover:bg-neutral-200 transition-all duration-300 font-['Oswald'] inline-block text-center"
-        >
-          Acceso
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link 
+            to="/admin" 
+            className="px-5 py-2.5 bg-white text-black font-bold text-xs uppercase tracking-widest hover:bg-neutral-200 transition-all duration-300 font-['Oswald'] inline-block text-center"
+          >
+            Acceso
+          </Link>
+          <Link 
+            to="/producciones-admin" 
+            className="px-5 py-2.5 bg-red-950/80 text-white border border-red-800 font-bold text-xs uppercase tracking-widest hover:bg-red-900 transition-all duration-300 font-['Oswald'] inline-block text-center"
+          >
+            Producciones
+          </Link>
+        </div>
       </footer>
 
       {/* Discrete Floating Contact Buttons */}

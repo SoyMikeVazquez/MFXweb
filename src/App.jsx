@@ -17,6 +17,7 @@ import { Mail } from 'lucide-react';
 
 import PortfolioPage from './pages/PortfolioPage';
 import GalleryAdmin from './pages/GalleryAdmin';
+import ProductionsAdmin from './pages/ProductionsAdmin';
 import CoursesLanding from './pages/CoursesLanding';
 
 import loadingAnim from './assets/mfxanimacion.gif';
@@ -134,6 +135,8 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/gallery" element={<PortfolioPage />} />
         <Route path="/admin" element={<GalleryAdmin />} />
+        <Route path="/producciones-admin" element={<ProductionsAdmin />} />
+        <Route path="/producciones" element={<ProductionsAdmin />} />
         <Route path="/cursos" element={<CoursesLanding />} />
         <Route path="/courses" element={<CoursesLanding />} />
       </Routes>

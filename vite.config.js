@@ -85,6 +85,23 @@ function galleryAdminPlugin(env = {}) {
           return;
         }
 
+        // Handle reading productions.json
+        if (req.method === 'GET' && req.url.startsWith('/api/productions')) {
+          try {
+            const targetPath = './public/imagenes web/imagenes/productions.json';
+            let data = [];
+            if (fs.existsSync(targetPath)) {
+              data = JSON.parse(fs.readFileSync(targetPath, 'utf-8'));
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(data));
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+          }
+          return;
+        }
+
         // Handle saving the full productions.json
         if (req.method === 'POST' && req.url === '/api/productions') {
           try {
@@ -109,7 +126,7 @@ function galleryAdminPlugin(env = {}) {
           return;
         }
 
-        // Handle uploading a new image file and updating images_canonical.json
+        // Handle uploading a new image file
         if (req.method === 'POST' && req.url === '/api/upload') {
           try {
             const body = await new Promise((resolve, reject) => {
@@ -119,7 +136,8 @@ function galleryAdminPlugin(env = {}) {
               req.on('error', reject);
             });
 
-            const { filename, base64Data, hover_caption, categories, productions } = JSON.parse(body);
+            const parsedBody = JSON.parse(body);
+            const { filename, base64Data, hover_caption, categories, productions, target, raw } = parsedBody;
             if (!filename || !base64Data) {
               res.writeHead(400, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ error: 'Missing filename or base64Data' }));
@@ -133,18 +151,25 @@ function galleryAdminPlugin(env = {}) {
             }
 
             const buffer = Buffer.from(base64, 'base64');
-            const destDir = './public/imagenes web/imagenes';
+            const isProdTarget = target === 'productions';
+            const destDir = isProdTarget ? './public/imagenes web/producciones' : './public/imagenes web/imagenes';
+            const urlPrefix = isProdTarget ? '/imagenes web/producciones' : '/imagenes web/imagenes';
+
+            if (!fs.existsSync(destDir)) {
+              fs.mkdirSync(destDir, { recursive: true });
+            }
+
             const destPath = path.join(destDir, filename);
 
             // Write image to disk
             fs.writeFileSync(destPath, buffer);
 
-            if (JSON.parse(body).raw) {
+            if (raw || isProdTarget) {
               res.writeHead(200, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({
                 success: true,
                 data: {
-                  src_url: `/imagenes web/imagenes/${filename}`,
+                  src_url: `${urlPrefix}/${filename}`,
                   filename
                 }
               }));

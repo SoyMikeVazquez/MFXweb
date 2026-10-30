@@ -73,6 +73,24 @@ if ($action === 'get_views') {
     exit;
 }
 
+// ─── ACTION: GET PRODUCTIONS (PUBLIC) ────────────────────────────────────────
+if ($action === 'get_productions') {
+    $productions_path = $images_dir . "/productions.json";
+    $productions = [];
+    if (file_exists($productions_path)) {
+        $content = file_get_contents($productions_path);
+        if ($content !== false) {
+            $productions = json_decode($content, true);
+            if (!is_array($productions)) {
+                $productions = [];
+            }
+        }
+    }
+    header('Content-Type: application/json');
+    echo json_encode($productions);
+    exit;
+}
+
 // ─── ACTION: INCREMENT VIEW (PUBLIC) ─────────────────────────────────────────
 if ($action === 'view') {
     $raw_input = file_get_contents('php://input');
@@ -300,7 +318,14 @@ if ($action === 'upload') {
         exit;
     }
     
-    $dest_path = $images_dir . "/" . $filename;
+    $is_prod_target = (isset($data['target']) && $data['target'] === 'productions');
+    $target_dir = $is_prod_target ? (__DIR__ . "/imagenes web/producciones") : $images_dir;
+    $url_prefix = $is_prod_target ? "/imagenes web/producciones/" : "/imagenes web/imagenes/";
+    if (!file_exists($target_dir)) {
+        mkdir($target_dir, 0755, true);
+    }
+
+    $dest_path = $target_dir . "/" . $filename;
     
     // Save image to disk
     $success = file_put_contents($dest_path, $binaryData, LOCK_EX);
@@ -310,11 +335,11 @@ if ($action === 'upload') {
         exit;
     }
 
-    if (isset($data['raw']) && $data['raw'] === true) {
+    if ((isset($data['raw']) && $data['raw'] === true) || $is_prod_target) {
         echo json_encode([
             "success" => true,
             "data" => [
-                "src_url" => "/imagenes web/imagenes/" . $filename,
+                "src_url" => $url_prefix . $filename,
                 "filename" => $filename
             ]
         ]);

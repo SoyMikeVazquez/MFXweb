@@ -26,7 +26,7 @@ const Footer = () => {
                             {t('footer', 'aboutText')}
                         </p>
 
-                        <div className="flex items-center gap-6">
+                        <div className="flex flex-wrap items-center gap-4">
                             <a href="https://maquillajefxmexico.com/privacy-policy/" target="_blank" rel="noopener noreferrer" className="inline-block text-white font-bold text-xs uppercase tracking-widest border-b border-white pb-1 hover:text-neutral-300 hover:border-neutral-300 transition-colors">
                                 {t('footer', 'privacy')}
                             </a>
@@ -35,6 +35,12 @@ const Footer = () => {
                                 className="px-5 py-2.5 bg-white text-black font-bold text-xs uppercase tracking-widest hover:bg-neutral-200 transition-all duration-300 font-['Oswald'] inline-block text-center"
                             >
                                 Acceso
+                            </Link>
+                            <Link 
+                                to="/producciones-admin" 
+                                className="px-5 py-2.5 bg-red-950/80 text-white border border-red-800 font-bold text-xs uppercase tracking-widest hover:bg-red-900 transition-all duration-300 font-['Oswald'] inline-block text-center"
+                            >
+                                Producciones
                             </Link>
                         </div>
                     </div>
