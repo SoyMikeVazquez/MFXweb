@@ -25,7 +25,6 @@ import {
   Layers,
   Image as ImageIcon
 } from 'lucide-react';
-import initialProductionsData from '../../public/imagenes web/imagenes/productions.json';
 import { supabase } from '../lib/supabaseClient';
 
 /**
@@ -193,15 +192,9 @@ const serializeProductionsForSave = (productionsList) => {
 
 function ProductionsAdminContent() {
   // Estado principal de Producciones (Carpetas)
-  const [productions, setProductions] = useState(() => normalizeProductionsData(initialProductionsData));
-  const [selectedProdName, setSelectedProdName] = useState(() => {
-    const norm = normalizeProductionsData(initialProductionsData);
-    return norm[0]?.name || '';
-  });
-  const [selectedOrderName, setSelectedOrderName] = useState(() => {
-    const norm = normalizeProductionsData(initialProductionsData);
-    return norm[0]?.orders?.[0]?.name || '';
-  });
+  const [productions, setProductions] = useState([]);
+  const [selectedProdName, setSelectedProdName] = useState('');
+  const [selectedOrderName, setSelectedOrderName] = useState('');
 
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -427,6 +420,14 @@ function ProductionsAdminContent() {
     } finally {
       setIsVerifyingLogin(false);
     }
+  };
+
+  const handleBypassLocal = () => {
+    setIsAuthenticated(true);
+    setUsername('local_developer');
+    sessionStorage.setItem('mfx_admin_authenticated', 'true');
+    sessionStorage.setItem('mfx_admin_username', 'local_developer');
+    showToast('Acceso local concedido.');
   };
 
   const handleLogout = async () => {
@@ -1074,6 +1075,15 @@ function ProductionsAdminContent() {
               )}
             </button>
           </form>
+
+          {isLocal && (
+            <button
+              onClick={handleBypassLocal}
+              className="mt-4 text-xs font-['Oswald'] text-neutral-500 hover:text-neutral-300 underline uppercase tracking-wider block mx-auto transition-colors cursor-pointer"
+            >
+              Acceder sin contraseña (Modo Local)
+            </button>
+          )}
 
           <div className="mt-8 flex items-center justify-center gap-6">
             <Link
@@ -1981,3 +1991,4 @@ export default function ProductionsAdmin(props) {
     </ProductionsErrorBoundary>
   );
 }
+

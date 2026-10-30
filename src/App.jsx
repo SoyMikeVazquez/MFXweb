@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import Hero from './components/Hero';
 import Navbar from './components/Navbar';
 import About from './components/About';
@@ -136,9 +136,13 @@ function App() {
         <Route path="/gallery" element={<PortfolioPage />} />
         <Route path="/admin" element={<GalleryAdmin />} />
         <Route path="/producciones-admin" element={<ProductionsAdmin />} />
+        <Route path="/producciones-admin." element={<Navigate to="/producciones-admin" replace />} />
+        <Route path="/producciones-admin/*" element={<ProductionsAdmin />} />
         <Route path="/producciones" element={<ProductionsAdmin />} />
+        <Route path="/producciones/*" element={<ProductionsAdmin />} />
         <Route path="/cursos" element={<CoursesLanding />} />
         <Route path="/courses" element={<CoursesLanding />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </LanguageProvider>
   );
