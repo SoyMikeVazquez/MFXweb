@@ -8,6 +8,28 @@
       "Prótesis",
       "Heridas"
     ],
+    "orders": [
+      {
+        "name": "Caracterización",
+        "order": 1,
+        "images": []
+      },
+      {
+        "name": "Envejecimiento",
+        "order": 2,
+        "images": []
+      },
+      {
+        "name": "Prótesis",
+        "order": 3,
+        "images": []
+      },
+      {
+        "name": "Heridas",
+        "order": 4,
+        "images": []
+      }
+    ],
     "images": []
   }
 ]

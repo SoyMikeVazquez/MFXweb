@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Component } from 'react';
+import { useState, useEffect, useRef, useMemo, Component } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -203,6 +203,12 @@ function ProductionsAdminContent() {
   const [newProdInput, setNewProdInput] = useState('');
   const [newOrderInput, setNewOrderInput] = useState('');
 
+  // Modales interactivos para crear
+  const [isCreatingProdModal, setIsCreatingProdModal] = useState(false);
+  const [modalProdName, setModalProdName] = useState('');
+  const [isCreatingOrderModal, setIsCreatingOrderModal] = useState(false);
+  const [modalOrderName, setModalOrderName] = useState('');
+
   // Modales de renombrado
   const [renamingProd, setRenamingProd] = useState(null); // { oldName, newName }
   const [renamingOrder, setRenamingOrder] = useState(null); // { oldName, newName }
@@ -339,29 +345,22 @@ function ProductionsAdminContent() {
       .catch(() => {});
   }, [isLocal]);
 
-  // Mantener sincronizada la Orden seleccionada cuando cambia la Producción
-  const activeProd = productions.find(p => p.name === selectedProdName) || null;
-  const activeOrders = activeProd ? activeProd.orders || [] : [];
-  const activeOrder = activeOrders.find(o => o.name === selectedOrderName) || null;
-  const activeImages = activeOrder ? activeOrder.images || [] : [];
+  // Producción y Orden activas calculadas dinámicamente con fallback seguro
+  const activeProd = useMemo(() => {
+    return productions.find(p => p.name === selectedProdName) || productions[0] || null;
+  }, [productions, selectedProdName]);
 
-  useEffect(() => {
-    if (!activeProd) {
-      if (productions.length > 0) {
-        setSelectedProdName(productions[0].name);
-        setSelectedOrderName(productions[0].orders?.[0]?.name || '');
-      } else {
-        setSelectedProdName('');
-        setSelectedOrderName('');
-      }
-      return;
-    }
-    if (activeProd.orders.length > 0 && !activeProd.orders.some(o => o.name === selectedOrderName)) {
-      setSelectedOrderName(activeProd.orders[0].name);
-    } else if (activeProd.orders.length === 0 && selectedOrderName !== '') {
-      setSelectedOrderName('');
-    }
-  }, [selectedProdName, productions, activeProd, selectedOrderName]);
+  const activeOrders = useMemo(() => {
+    return activeProd?.orders || [];
+  }, [activeProd]);
+
+  const activeOrder = useMemo(() => {
+    return activeOrders.find(o => o.name === selectedOrderName) || activeOrders[0] || null;
+  }, [activeOrders, selectedOrderName]);
+
+  const activeImages = useMemo(() => {
+    return activeOrder?.images || [];
+  }, [activeOrder]);
 
   // Login Handler
   const handleLogin = async (e) => {
@@ -484,13 +483,22 @@ function ProductionsAdminContent() {
   /* ═══════════════════════════════════════════════════════════════════════════
    * 1. ACCIONES DE PRODUCCIONES (CARPETAS PRINCIPALES)
    * ═══════════════════════════════════════════════════════════════════════════ */
-  const handleCreateProduction = async (e) => {
-    e.preventDefault();
-    const clean = newProdInput.trim();
-    if (!clean) return;
+  const handleCreateProduction = async (e, directName = null) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const raw = directName !== null ? directName : newProdInput;
+    const clean = (raw || '').trim();
+    if (!clean) {
+      if (directName !== null) {
+        showToast('Por favor escribe un nombre para la Producción.', 'error');
+        return;
+      }
+      setModalProdName('');
+      setIsCreatingProdModal(true);
+      return;
+    }
 
     if (productions.some(p => p.name.toLowerCase() === clean.toLowerCase())) {
-      showToast('Ya existe una Producción (Carpeta) con ese nombre.', 'error');
+      showToast(`Ya existe una Producción con el nombre "${clean}".`, 'error');
       return;
     }
 
@@ -508,7 +516,10 @@ function ProductionsAdminContent() {
     };
 
     const nextList = [...productions, newProd];
+    setProductions(nextList);
     setNewProdInput('');
+    setModalProdName('');
+    setIsCreatingProdModal(false);
     setSelectedProdName(clean);
     setSelectedOrderName(defaultFirstOrder.name);
     await persistProductions(nextList, `Producción "${clean}" creada con su primera subcarpeta "Orden 1".`);
@@ -571,18 +582,27 @@ function ProductionsAdminContent() {
   /* ═══════════════════════════════════════════════════════════════════════════
    * 2. ACCIONES DE ÓRDENES (SUBCARPETAS DENTRO DE LA PRODUCCIÓN ACTIVA)
    * ═══════════════════════════════════════════════════════════════════════════ */
-  const handleCreateOrder = async (e) => {
-    e.preventDefault();
+  const handleCreateOrder = async (e, directName = null) => {
+    if (e && e.preventDefault) e.preventDefault();
     if (!activeProd) {
       showToast('Primero selecciona o crea una Producción (Carpeta).', 'error');
       return;
     }
 
-    const clean = newOrderInput.trim();
-    if (!clean) return;
+    const raw = directName !== null ? directName : newOrderInput;
+    const clean = (raw || '').trim();
+    if (!clean) {
+      if (directName !== null) {
+        showToast('Por favor escribe un nombre para la Orden (Subcarpeta).', 'error');
+        return;
+      }
+      setModalOrderName('');
+      setIsCreatingOrderModal(true);
+      return;
+    }
 
     if (activeOrders.some(o => o.name.toLowerCase() === clean.toLowerCase())) {
-      showToast('Ya existe una Orden (Subcarpeta) con ese nombre en esta Producción.', 'error');
+      showToast(`Ya existe una Orden con el nombre "${clean}" en esta Producción.`, 'error');
       return;
     }
 
@@ -593,10 +613,13 @@ function ProductionsAdminContent() {
     };
 
     const nextList = productions.map(p =>
-      p.name === activeProd.name ? { ...p, orders: [...p.orders, newOrd] } : p
+      p.name === activeProd.name ? { ...p, orders: [...(p.orders || []), newOrd] } : p
     );
 
+    setProductions(nextList);
     setNewOrderInput('');
+    setModalOrderName('');
+    setIsCreatingOrderModal(false);
     setSelectedOrderName(clean);
     await persistProductions(nextList, `Orden (Subcarpeta) "${clean}" creada en ${activeProd.name}.`);
   };
@@ -1826,6 +1849,106 @@ function ProductionsAdminContent() {
           )}
         </section>
       </main>
+
+      {/* Modal para crear nueva Producción (Carpeta) */}
+      {isCreatingProdModal && (
+        <div className="fixed inset-0 z-[1200] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <form
+            onSubmit={(e) => handleCreateProduction(e, modalProdName)}
+            className="max-w-md w-full bg-[#0a0a0a] border border-neutral-800 rounded-xl p-6 shadow-2xl relative"
+          >
+            <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-red-800 to-transparent"></div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-bold uppercase font-['Oswald'] text-white flex items-center gap-2">
+                <FolderPlus size={18} className="text-red-600" /> Crear Nueva Producción
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsCreatingProdModal(false)}
+                className="text-neutral-500 hover:text-white p-1 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-xs text-neutral-400 italic mb-4">
+              Ingresa el nombre del proyecto o carpeta principal (ej. "Bardo", "Mal de Ojo", "100 Años de Soledad").
+            </p>
+            <input
+              type="text"
+              value={modalProdName}
+              onChange={e => setModalProdName(e.target.value)}
+              placeholder="Nombre de la Producción..."
+              className="w-full bg-[#0d0d0d] border border-neutral-800 focus:border-red-800 focus:outline-none p-3 text-sm text-white rounded font-sans mb-4"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsCreatingProdModal(false)}
+                className="px-4 py-2 border border-neutral-800 text-neutral-400 hover:text-white text-xs font-bold uppercase font-['Oswald'] rounded cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 bg-red-950/70 hover:bg-red-900 border border-red-800 text-white text-xs font-bold uppercase font-['Oswald'] rounded cursor-pointer flex items-center gap-1.5"
+              >
+                <Plus size={14} /> Crear Producción
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal para crear nueva Orden (Subcarpeta) */}
+      {isCreatingOrderModal && (
+        <div className="fixed inset-0 z-[1200] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <form
+            onSubmit={(e) => handleCreateOrder(e, modalOrderName)}
+            className="max-w-md w-full bg-[#0a0a0a] border border-neutral-800 rounded-xl p-6 shadow-2xl relative"
+          >
+            <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-red-800 to-transparent"></div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-bold uppercase font-['Oswald'] text-white flex items-center gap-2">
+                <FolderPlus size={18} className="text-red-600" /> Crear Nueva Orden (Subcarpeta)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsCreatingOrderModal(false)}
+                className="text-neutral-500 hover:text-white p-1 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-xs text-neutral-400 italic mb-4">
+              Se creará dentro de <strong className="text-white not-italic font-['Oswald'] uppercase">{activeProd?.name}</strong> (ej. "Personajes", "Prótesis", "Envejecimiento").
+            </p>
+            <input
+              type="text"
+              value={modalOrderName}
+              onChange={e => setModalOrderName(e.target.value)}
+              placeholder="Nombre de la Orden / Subcarpeta..."
+              className="w-full bg-[#0d0d0d] border border-neutral-800 focus:border-red-800 focus:outline-none p-3 text-sm text-white rounded font-sans mb-4"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsCreatingOrderModal(false)}
+                className="px-4 py-2 border border-neutral-800 text-neutral-400 hover:text-white text-xs font-bold uppercase font-['Oswald'] rounded cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 bg-red-950/70 hover:bg-red-900 border border-red-800 text-white text-xs font-bold uppercase font-['Oswald'] rounded cursor-pointer flex items-center gap-1.5"
+              >
+                <FolderPlus size={14} /> Crear Orden
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Modal para renombrar Producción (Carpeta) */}
       {renamingProd && (
