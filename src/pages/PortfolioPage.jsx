@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, X, ChevronLeft, ChevronRight, Mail, Play, Eye, Folder } from 'lucide-react';
 import Navbar from '../components/Navbar';
@@ -39,13 +39,15 @@ function extractProductionImages(prod) {
   const pName = prod.name || '';
   if (Array.isArray(prod.orders) && prod.orders.length > 0) {
     let globalOrder = 1;
-    return prod.orders.flatMap((ord) => {
+    const sortedOrders = [...prod.orders].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    return sortedOrders.flatMap((ord) => {
       const ordName = typeof ord === 'string' ? ord : ord?.name || '';
-      const imgs = Array.isArray(ord?.images) ? ord.images : [];
+      const imgs = Array.isArray(ord?.images) ? [...ord.images].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)) : [];
       return imgs.map((img) => ({
         ...img,
         hover_caption: img.hover_caption || `${pName} - ${ordName}`,
         folder: ordName,
+        orderName: ordName,
         productionName: pName,
         order: globalOrder++
       }));
@@ -64,7 +66,12 @@ function prepareImages(portfolioImages, productionsList, category, filterMode = 
   if (filterMode === 'production') {
     let prodImages = [];
     if (category === 'All') {
-      prodImages = (productionsList || []).flatMap((p) => extractProductionImages(p));
+      const sortedProds = [...(productionsList || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      let gOrder = 1;
+      prodImages = sortedProds.flatMap((p) => {
+        const imgs = extractProductionImages(p);
+        return imgs.map((im) => ({ ...im, order: gOrder++ }));
+      });
     } else {
       const activeP = (productionsList || []).find((p) => (typeof p === 'string' ? p : p?.name) === category);
       prodImages = extractProductionImages(activeP);
@@ -685,16 +692,46 @@ export default function PortfolioPage() {
               No hay imágenes disponibles en esta selección
             </div>
           ) : (
-            filtered.map((img, idx) => (
-              <GalleryItem
-                key={`${displayCategory}-${subCategory}-${img.filename}-${img.order ?? idx}`}
-                img={img}
-                index={idx}
-                onClick={openLb}
-                isRectangular={displayCategory === 'Videos'}
-                views={views}
-              />
-            ))
+            filtered.map((img, idx) => {
+              const currentOrder = img.folder || img.orderName || '';
+              const prevOrder = idx > 0 ? (filtered[idx - 1].folder || filtered[idx - 1].orderName || '') : null;
+              const isNewOrder = filterMode === 'production' && Boolean(currentOrder) && currentOrder !== prevOrder;
+              const orderCount = isNewOrder
+                ? filtered.filter(item => (item.folder || item.orderName) === currentOrder && (!img.productionName || item.productionName === img.productionName)).length
+                : 0;
+
+              return (
+                <Fragment key={`${displayCategory}-${subCategory}-${img.filename}-${img.order ?? idx}`}>
+                  {isNewOrder && (
+                    <div
+                      className={`col-span-full w-full flex items-center gap-3 select-none ${
+                        idx === 0 ? 'pt-2 pb-3 mb-1' : 'pt-10 pb-3 mt-6 mb-1 border-t border-neutral-900/60'
+                      }`}
+                      style={{ gridColumn: '1 / -1' }}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-1 h-3.5 bg-red-600 rounded-xs block"></span>
+                        <Folder size={13} className="text-red-500" />
+                        <h3 className="text-xs sm:text-sm font-bold font-['Oswald'] uppercase tracking-widest text-neutral-200">
+                          {currentOrder}
+                        </h3>
+                        <span className="text-[11px] font-sans italic text-neutral-500 font-normal">
+                          ({orderCount} {orderCount === 1 ? 'trabajo' : 'trabajos'})
+                        </span>
+                      </div>
+                      <div className="flex-1 h-px bg-gradient-to-r from-red-900/40 via-neutral-800 to-transparent"></div>
+                    </div>
+                  )}
+                  <GalleryItem
+                    img={img}
+                    index={idx}
+                    onClick={openLb}
+                    isRectangular={displayCategory === 'Videos'}
+                    views={views}
+                  />
+                </Fragment>
+              );
+            })
           )}
         </div>
       </main>
@@ -714,16 +751,17 @@ export default function PortfolioPage() {
       {/* ── Footer ──────────────────────────────────────────────────────── */}
       <footer className="pf-footer flex flex-col sm:flex-row items-center justify-center gap-4">
         <p style={{ color: 'white' }}>© {new Date().getFullYear()} MFX Mexico — Todos los derechos reservados</p>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <Link 
             to="/admin" 
-            className="px-5 py-2.5 bg-white text-black font-bold text-xs uppercase tracking-widest hover:bg-neutral-200 transition-all duration-300 font-['Oswald'] inline-block text-center"
+            className="text-neutral-500 hover:text-neutral-300 text-xs uppercase tracking-widest transition-colors duration-200 font-['Oswald']"
           >
             Acceso
           </Link>
+          <span className="text-neutral-700 text-xs">•</span>
           <Link 
             to="/producciones-admin" 
-            className="px-5 py-2.5 bg-red-950/80 text-white border border-red-800 font-bold text-xs uppercase tracking-widest hover:bg-red-900 transition-all duration-300 font-['Oswald'] inline-block text-center"
+            className="text-neutral-500 hover:text-neutral-300 text-xs uppercase tracking-widest transition-colors duration-200 font-['Oswald']"
           >
             Producciones
           </Link>
